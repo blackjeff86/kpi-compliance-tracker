@@ -1,0 +1,1404 @@
+[00:00:01.591] Server  LOG     ✓ Ready in 1408ms
+[00:00:07.516] Server  WARN    ⚠ Cross origin request detected from 192.168.0.65 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+[00:00:07.540] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:08.237] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:00:21.215] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:21.299] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:00:21.356] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <div className="flex min-h...">
+      ...
+        <MenuProvider scope={{Menu:[...], ...}} open={false} onOpenChange={function useCallbackRef.useMemo} ...>
+          <MenuProvider scope={{Menu:[...], ...}} onClose={function Menu.useCallback} ...>
+            <DropdownMenuTrigger asChild={true}>
+              <MenuAnchor asChild={true} __scopeMenu={{Menu:[...], ...}}>
+                <PopperAnchor __scopePopper={{Menu:[...], ...}} asChild={true} ref={null}>
+                  <Primitive.div asChild={true} ref={function}>
+                    <Slot ref={function}>
+                      <SlotClone ref={function}>
+                        <Primitive.button type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                          <Slot type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                            <SlotClone type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                              <button
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-co..."
+                                type="button"
++                               id="radix-_R_r5rlb_"
+-                               id="radix-_R_3d5rlb_"
+                                aria-haspopup="menu"
+                                aria-expanded={false}
+                                aria-controls={undefined}
+                                data-state="closed"
+                                data-disabled={undefined}
+                                disabled={false}
+                                onPointerDown={function handleEvent}
+                                onKeyDown={function handleEvent}
+                                ref={function}
+                              >
+            ...
+      ...
+        <ClientPageRoot Component={function ControlsPage} serverProvidedParams={{...}}>
+          <ControlsPage params={Promise} searchParams={Promise}>
+            <div className="space-y-6">
+              <div className="flex flex-...">
+                <div>
+                <div className="flex flex-...">
+                  <Dialog open={false} onOpenChange={function bound dispatchSetState}>
+                    <DialogProvider scope={undefined} triggerRef={{current:null}} contentRef={{current:null}} ...>
+                      <DialogTrigger asChild={true}>
+                        <Primitive.button type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                          <Slot type="button" aria-haspopup="dialog" aria-expanded={false} aria-controls="radix-_R_c..." ...>
+                            <SlotClone type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                              <_c variant="outline" className="gap-2 bg-t..." type="button" aria-haspopup="dialog" ...>
+                                <button
+                                  className={"inline-flex items-center justify-center whitespace-nowrap rounded-md te..."}
+                                  ref={function}
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={false}
++                                 aria-controls="radix-_R_c6atpet5rlb_"
+-                                 aria-controls="radix-_R_1gpbn5rl5rlb_"
+                                  data-state="closed"
+                                  onClick={function handleEvent}
+                                >
+                      ...
+                  <Dialog open={false} onOpenChange={function bound dispatchSetState}>
+                    <DialogProvider scope={undefined} triggerRef={{current:null}} contentRef={{current:null}} ...>
+                      <DialogTrigger asChild={true}>
+                        <Primitive.button type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                          <Slot type="button" aria-haspopup="dialog" aria-expanded={false} aria-controls="radix-_R_k..." ...>
+                            <SlotClone type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                              <_c className="gap-2" type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                                <button
+                                  className={"inline-flex items-center justify-center whitespace-nowrap rounded-md te..."}
+                                  ref={function}
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={false}
++                                 aria-controls="radix-_R_k6atpet5rlb_"
+-                                 aria-controls="radix-_R_2gpbn5rl5rlb_"
+                                  data-state="closed"
+                                  onClick={function handleEvent}
+                                >
+                      ...
+              ...
+                <div role="tablist" aria-orientation="horizontal" className="inline-fle..." tabIndex={-1} ...>
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_q..." focusable={true} active={true}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={true} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={true}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-SOX"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-SOX"
+                                    data-state="active"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-SOX"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-SOX"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   SOX
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_1..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-SOC"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-SOC"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-SOC"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-SOC"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   SOC
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_1..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-ISO"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-ISO"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-ISO"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-ISO"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   ISO
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_2..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-PCI"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-PCI"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-PCI"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-PCI"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   PCI
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_2..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-ALL"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-ALL"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-ALL"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-ALL"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   Todos
+              <_c>
+              <div>
+              ...
+                <div className="grid gap-3...">
+                  <div>
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_4..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_4qatpet5rlb_"
+-                                   aria-controls="radix-_R_j9bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_6..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_6qatpet5rlb_"
+-                                   aria-controls="radix-_R_r9bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_8..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_8qatpet5rlb_"
+-                                   aria-controls="radix-_R_139bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+              ...
+
+[00:00:23.364] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:23.439] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:00:34.116] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:00:34.140] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:00:36.296] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:00:36.328] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:01:06.299] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:01:06.419] Browser ERROR   uncaughtError: Error: DATABASE_URL não configurada.
+[00:04:15.464] Server  LOG       Reload env: .env.local
+[00:04:15.613] Server  ERROR   ⨯ Error: DATABASE_URL não configurada.
+[00:04:15.793] Browser ERROR   uncaughtError: Error: DATABASE_URL não configurada.
+[00:04:19.862] Server  LOG       Reload env: .env.local
+[00:04:20.477] Server  ERROR   ⨯ NeonDbError: Error connecting to database: TypeError: fetch failed
+[00:04:38.655] Server  ERROR   ⨯ NeonDbError: Error connecting to database: TypeError: fetch failed
+[00:09:47.229] Server  LOG       Reload env: .env.local
+[00:12:40.428] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:12:40.428] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:13:13.594] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:13:13.594] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:13:27.664] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:13:27.664] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:22:56.801] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:22:56.801] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:23:27.371] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:23:30.610] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:49:59.681] Server  LOG     ✓ Compiled in 127ms
+[00:57:11.678] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:57:11.813] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <div className="flex min-h...">
+      ...
+        <MenuProvider scope={{Menu:[...], ...}} open={false} onOpenChange={function useCallbackRef.useMemo} ...>
+          <MenuProvider scope={{Menu:[...], ...}} onClose={function Menu.useCallback} ...>
+            <DropdownMenuTrigger asChild={true}>
+              <MenuAnchor asChild={true} __scopeMenu={{Menu:[...], ...}}>
+                <PopperAnchor __scopePopper={{Menu:[...], ...}} asChild={true} ref={null}>
+                  <Primitive.div asChild={true} ref={function}>
+                    <Slot ref={function}>
+                      <SlotClone ref={function}>
+                        <Primitive.button type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                          <Slot type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                            <SlotClone type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                              <button
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-co..."
+                                type="button"
++                               id="radix-_R_r5rlb_"
+-                               id="radix-_R_3d5rlb_"
+                                aria-haspopup="menu"
+                                aria-expanded={false}
+                                aria-controls={undefined}
+                                data-state="closed"
+                                data-disabled={undefined}
+                                disabled={false}
+                                onPointerDown={function handleEvent}
+                                onKeyDown={function handleEvent}
+                                ref={function}
+                              >
+            ...
+      ...
+        <ClientPageRoot Component={function ControlsPage} serverProvidedParams={{...}}>
+          <ControlsPage params={Promise} searchParams={Promise}>
+            <div className="space-y-6">
+              <div className="flex flex-...">
+                <div>
+                <div className="flex flex-...">
+                  <Dialog open={false} onOpenChange={function onOpenChange}>
+                    <DialogProvider scope={undefined} triggerRef={{current:null}} contentRef={{current:null}} ...>
+                      <DialogTrigger asChild={true}>
+                        <Primitive.button type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                          <Slot type="button" aria-haspopup="dialog" aria-expanded={false} aria-controls="radix-_R_c..." ...>
+                            <SlotClone type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                              <_c variant="outline" className="gap-2 bg-t..." type="button" aria-haspopup="dialog" ...>
+                                <button
+                                  className={"inline-flex items-center justify-center whitespace-nowrap rounded-md te..."}
+                                  ref={function}
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={false}
++                                 aria-controls="radix-_R_c6atpet5rlb_"
+-                                 aria-controls="radix-_R_1gpbn5rl5rlb_"
+                                  data-state="closed"
+                                  onClick={function handleEvent}
+                                >
+                      ...
+                  <Dialog open={false} onOpenChange={function bound dispatchSetState}>
+                    <DialogProvider scope={undefined} triggerRef={{current:null}} contentRef={{current:null}} ...>
+                      <DialogTrigger asChild={true}>
+                        <Primitive.button type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                          <Slot type="button" aria-haspopup="dialog" aria-expanded={false} aria-controls="radix-_R_k..." ...>
+                            <SlotClone type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                              <_c className="gap-2" type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                                <button
+                                  className={"inline-flex items-center justify-center whitespace-nowrap rounded-md te..."}
+                                  ref={function}
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={false}
++                                 aria-controls="radix-_R_k6atpet5rlb_"
+-                                 aria-controls="radix-_R_2gpbn5rl5rlb_"
+                                  data-state="closed"
+                                  onClick={function handleEvent}
+                                >
+                      ...
+              ...
+                <div role="tablist" aria-orientation="horizontal" className="inline-fle..." tabIndex={-1} ...>
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_q..." focusable={true} active={true}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={true} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={true}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-SOX"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-SOX"
+                                    data-state="active"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-SOX"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-SOX"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   SOX
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_1..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-SOC"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-SOC"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-SOC"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-SOC"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   SOC
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_1..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-ISO"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-ISO"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-ISO"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-ISO"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   ISO
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_2..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-PCI"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-PCI"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-PCI"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-PCI"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   PCI
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_2..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-ALL"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-ALL"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-ALL"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-ALL"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   Todos
+              <_c>
+              <div>
+              ...
+                <div className="grid gap-3...">
+                  <div>
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_4..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_4qatpet5rlb_"
+-                                   aria-controls="radix-_R_j9bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_6..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_6qatpet5rlb_"
+-                                   aria-controls="radix-_R_r9bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_8..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_8qatpet5rlb_"
+-                                   aria-controls="radix-_R_139bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+              ...
+
+[00:57:15.122] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:57:15.250] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <div className="flex min-h...">
+      ...
+        <MenuProvider scope={{Menu:[...], ...}} open={false} onOpenChange={function useCallbackRef.useMemo} ...>
+          <MenuProvider scope={{Menu:[...], ...}} onClose={function Menu.useCallback} ...>
+            <DropdownMenuTrigger asChild={true}>
+              <MenuAnchor asChild={true} __scopeMenu={{Menu:[...], ...}}>
+                <PopperAnchor __scopePopper={{Menu:[...], ...}} asChild={true} ref={null}>
+                  <Primitive.div asChild={true} ref={function}>
+                    <Slot ref={function}>
+                      <SlotClone ref={function}>
+                        <Primitive.button type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                          <Slot type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                            <SlotClone type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                              <button
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-co..."
+                                type="button"
++                               id="radix-_R_r5rlb_"
+-                               id="radix-_R_3d5rlb_"
+                                aria-haspopup="menu"
+                                aria-expanded={false}
+                                aria-controls={undefined}
+                                data-state="closed"
+                                data-disabled={undefined}
+                                disabled={false}
+                                onPointerDown={function handleEvent}
+                                onKeyDown={function handleEvent}
+                                ref={function}
+                              >
+            ...
+      ...
+        <ClientPageRoot Component={function ControlsPage} serverProvidedParams={{...}}>
+          <ControlsPage params={Promise} searchParams={Promise}>
+            <div className="space-y-6">
+              <div className="flex flex-...">
+                <div>
+                <div className="flex flex-...">
+                  <Dialog open={false} onOpenChange={function onOpenChange}>
+                    <DialogProvider scope={undefined} triggerRef={{current:null}} contentRef={{current:null}} ...>
+                      <DialogTrigger asChild={true}>
+                        <Primitive.button type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                          <Slot type="button" aria-haspopup="dialog" aria-expanded={false} aria-controls="radix-_R_c..." ...>
+                            <SlotClone type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                              <_c variant="outline" className="gap-2 bg-t..." type="button" aria-haspopup="dialog" ...>
+                                <button
+                                  className={"inline-flex items-center justify-center whitespace-nowrap rounded-md te..."}
+                                  ref={function}
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={false}
++                                 aria-controls="radix-_R_c6atpet5rlb_"
+-                                 aria-controls="radix-_R_1gpbn5rl5rlb_"
+                                  data-state="closed"
+                                  onClick={function handleEvent}
+                                >
+                      ...
+                  <Dialog open={false} onOpenChange={function bound dispatchSetState}>
+                    <DialogProvider scope={undefined} triggerRef={{current:null}} contentRef={{current:null}} ...>
+                      <DialogTrigger asChild={true}>
+                        <Primitive.button type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                          <Slot type="button" aria-haspopup="dialog" aria-expanded={false} aria-controls="radix-_R_k..." ...>
+                            <SlotClone type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                              <_c className="gap-2" type="button" aria-haspopup="dialog" aria-expanded={false} ...>
+                                <button
+                                  className={"inline-flex items-center justify-center whitespace-nowrap rounded-md te..."}
+                                  ref={function}
+                                  type="button"
+                                  aria-haspopup="dialog"
+                                  aria-expanded={false}
++                                 aria-controls="radix-_R_k6atpet5rlb_"
+-                                 aria-controls="radix-_R_2gpbn5rl5rlb_"
+                                  data-state="closed"
+                                  onClick={function handleEvent}
+                                >
+                      ...
+              ...
+                <div role="tablist" aria-orientation="horizontal" className="inline-fle..." tabIndex={-1} ...>
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_q..." focusable={true} active={true}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={true} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={true}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-SOX"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-SOX"
+                                    data-state="active"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-SOX"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-SOX"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   SOX
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_1..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-SOC"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-SOC"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-SOC"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-SOC"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   SOC
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_1..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-ISO"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-ISO"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-ISO"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-ISO"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   ISO
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_2..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-PCI"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-PCI"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-PCI"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-PCI"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   PCI
+                  ...
+                    <RovingFocusGroupCollectionItemSlot scope={{...}} id="radix-_R_2..." focusable={true} active={false}>
+                      <Slot data-radix-collection-item="" ref={function}>
+                        <SlotClone data-radix-collection-item="" ref={function}>
+                          <Primitive.span tabIndex={-1} data-orientation="horizontal" asChild={true} ref={function} ...>
+                            <Slot tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                              <SlotClone tabIndex={-1} data-orientation="horizontal" onMouseDown={function handleEvent} ...>
+                                <Primitive.button type="button" role="tab" aria-selected={false} ...>
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={false}
++                                   aria-controls="radix-_R_2aatpet5rlb_-content-ALL"
+-                                   aria-controls="radix-_R_99bn5rl5rlb_-content-ALL"
+                                    data-state="inactive"
+                                    data-disabled={undefined}
+                                    disabled={false}
++                                   id="radix-_R_2aatpet5rlb_-trigger-ALL"
+-                                   id="radix-_R_99bn5rl5rlb_-trigger-ALL"
+                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px..."
+                                    onMouseDown={function}
+                                    onKeyDown={function}
+                                    onFocus={function}
+                                    tabIndex={-1}
+                                    data-orientation="horizontal"
+                                    data-radix-collection-item=""
+                                    ref={function}
+                                  >
++                                   Todos
+              <_c>
+              <div>
+              ...
+                <div className="grid gap-3...">
+                  <div>
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_4..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_4qatpet5rlb_"
+-                                   aria-controls="radix-_R_j9bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_6..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_6qatpet5rlb_"
+-                                   aria-controls="radix-_R_r9bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+                    <_c className="h-10">
+                      <SelectTrigger ref={null} className={"flex w-f..."}>
+                        <PopperAnchor asChild={true} __scopePopper={{Popper:[...]}}>
+                          <Primitive.div asChild={true} ref={function}>
+                            <Slot ref={function}>
+                              <SlotClone ref={function}>
+                                <Primitive.button type="button" role="combobox" aria-controls="radix-_R_8..." ...>
+                                  <button
+                                    type="button"
+                                    role="combobox"
++                                   aria-controls="radix-_R_8qatpet5rlb_"
+-                                   aria-controls="radix-_R_139bn5rl5rlb_"
+                                    aria-expanded={false}
+                                    aria-required={undefined}
+                                    aria-autocomplete="none"
+                                    dir="ltr"
+                                    data-state="closed"
+                                    disabled={false}
+                                    data-disabled={undefined}
+                                    data-placeholder={undefined}
+                                    className={"flex w-full items-center justify-between rounded-md border border-inp..."}
+                                    onClick={function handleEvent}
+                                    onPointerDown={function handleEvent}
+                                    onKeyDown={function handleEvent}
+                                    ref={function}
+                                  >
+                  ...
+              ...
+
+[00:57:17.797] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:57:17.797] Browser WARN    Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+[00:59:35.876] Server  LOG     ✓ Compiled in 38ms
+[00:59:35.977] Browser ERROR   React has detected a change in the order of Hooks called by %s. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+%s   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ ControlsPage 1. useState                   useState
+2. useEffect                  useEffect
+3. undefined                  useState
+
+[00:59:35.977] Browser ERROR   uncaughtError: Error: Rendered more hooks than during the previous render.
+[01:00:08.727] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:00:08.909] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <PopperProvider scope={{Menu:[...], ...}} anchor={null} onAnchorChange={function bound dispatchSetState}>
+      <MenuProvider scope={{Menu:[...], ...}} open={false} onOpenChange={function useCallbackRef.useMemo} content={null} ...>
+        <MenuProvider scope={{Menu:[...], ...}} onClose={function Menu.useCallback} isUsingKeyboardRef={{current:false}} ...>
+          <DropdownMenuTrigger asChild={true}>
+            <MenuAnchor asChild={true} __scopeMenu={{Menu:[...], ...}}>
+              <PopperAnchor __scopePopper={{Menu:[...], ...}} asChild={true} ref={null}>
+                <Primitive.div asChild={true} ref={function}>
+                  <Slot ref={function}>
+                    <SlotClone ref={function}>
+                      <Primitive.button type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                        <Slot type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                          <SlotClone type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                            <button
+                              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colo..."
+                              type="button"
++                             id="radix-_R_r5rlb_"
+-                             id="radix-_R_3d5rlb_"
+                              aria-haspopup="menu"
+                              aria-expanded={false}
+                              aria-controls={undefined}
+                              data-state="closed"
+                              data-disabled={undefined}
+                              disabled={false}
+                              onPointerDown={function handleEvent}
+                              onKeyDown={function handleEvent}
+                              ref={function}
+                            >
+          ...
+
+[01:00:08.909] Browser ERROR   React has detected a change in the order of Hooks called by %s. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+%s   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ ControlsPage 1. useState                   useState
+2. useEffect                  useEffect
+3. undefined                  useState
+
+[01:00:08.909] Browser ERROR   uncaughtError: Error: Rendered more hooks than during the previous render.
+[01:00:10.391] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:00:10.499] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <PopperProvider scope={{Menu:[...], ...}} anchor={null} onAnchorChange={function bound dispatchSetState}>
+      <MenuProvider scope={{Menu:[...], ...}} open={false} onOpenChange={function useCallbackRef.useMemo} content={null} ...>
+        <MenuProvider scope={{Menu:[...], ...}} onClose={function Menu.useCallback} isUsingKeyboardRef={{current:false}} ...>
+          <DropdownMenuTrigger asChild={true}>
+            <MenuAnchor asChild={true} __scopeMenu={{Menu:[...], ...}}>
+              <PopperAnchor __scopePopper={{Menu:[...], ...}} asChild={true} ref={null}>
+                <Primitive.div asChild={true} ref={function}>
+                  <Slot ref={function}>
+                    <SlotClone ref={function}>
+                      <Primitive.button type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                        <Slot type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                          <SlotClone type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                            <button
+                              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colo..."
+                              type="button"
++                             id="radix-_R_r5rlb_"
+-                             id="radix-_R_3d5rlb_"
+                              aria-haspopup="menu"
+                              aria-expanded={false}
+                              aria-controls={undefined}
+                              data-state="closed"
+                              data-disabled={undefined}
+                              disabled={false}
+                              onPointerDown={function handleEvent}
+                              onKeyDown={function handleEvent}
+                              ref={function}
+                            >
+          ...
+
+[01:00:10.499] Browser ERROR   React has detected a change in the order of Hooks called by %s. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+%s   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ ControlsPage 1. useState                   useState
+2. useEffect                  useEffect
+3. undefined                  useState
+
+[01:00:10.499] Browser ERROR   uncaughtError: Error: Rendered more hooks than during the previous render.
+[01:11:06.399] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[01:11:06.399] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./app/(app)/layout.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[01:11:06.399] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[01:11:06.401] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[01:11:06.401] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./app/(app)/layout.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[01:11:06.401] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[01:11:06.484] Server  LOG     ✓ Compiled in 205ms
+[01:11:06.639] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:11:31.510] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./app/(app)/layout.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[01:11:31.592] Server  LOG     ✓ Compiled in 3ms
+[01:11:31.668] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:11:31.792] Browser ERROR   React has detected a change in the order of Hooks called by %s. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+%s   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ ControlsPage 1. useState                   useState
+2. useEffect                  useEffect
+3. undefined                  useState
+
+[01:11:31.792] Browser ERROR   uncaughtError: Error: Rendered more hooks than during the previous render.
+[01:11:48.686] Server  WARN    ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[01:11:48.750] Server  LOG     ✓ Compiled in 30ms
+[01:11:48.919] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:11:49.022] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <PopperProvider scope={{Menu:[...], ...}} anchor={null} onAnchorChange={function bound dispatchSetState}>
+      <MenuProvider scope={{Menu:[...], ...}} open={false} onOpenChange={function useCallbackRef.useMemo} content={null} ...>
+        <MenuProvider scope={{Menu:[...], ...}} onClose={function Menu.useCallback} isUsingKeyboardRef={{current:false}} ...>
+          <DropdownMenuTrigger asChild={true}>
+            <MenuAnchor asChild={true} __scopeMenu={{Menu:[...], ...}}>
+              <PopperAnchor __scopePopper={{Menu:[...], ...}} asChild={true} ref={null}>
+                <Primitive.div asChild={true} ref={function}>
+                  <Slot ref={function}>
+                    <SlotClone ref={function}>
+                      <Primitive.button type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                        <Slot type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                          <SlotClone type="button" id="radix-_R_r..." aria-haspopup="menu" aria-expanded={false} ...>
+                            <button
+                              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colo..."
+                              type="button"
++                             id="radix-_R_r5rlb_"
+-                             id="radix-_R_3d5rlb_"
+                              aria-haspopup="menu"
+                              aria-expanded={false}
+                              aria-controls={undefined}
+                              data-state="closed"
+                              data-disabled={undefined}
+                              disabled={false}
+                              onPointerDown={function handleEvent}
+                              onKeyDown={function handleEvent}
+                              ref={function}
+                            >
+          ...
+
+[01:14:02.859] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:02.972] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:02.976] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./app/(app)/layout.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[01:14:02.976] Server  WARN    ⚠ Fast Refresh had to perform a full reload when ./app/(app)/layout.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[01:14:03.124] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.224] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.224] Server  LOG     ✓ Compiled in 8ms
+[01:14:03.323] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.420] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.535] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.632] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.768] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.881] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:03.950] Browser ERROR   uncaughtError: Error: The default export is not a React Component in "/controls/layout"
+[01:14:32.209] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:32.339] Server  ERROR   ⨯ Error: The default export is not a React Component in "/controls/layout"
+[01:14:32.429] Browser ERROR   unhandledRejection: Error: Module [next]/entry/page-loader.ts { PAGE => "[project]/node_modules/next/app.js [client] (ecmascript)" } [client] (ecmascript) was instantiated because it was required from module [hmr-entry]/hmr-entry.js { ENTRY => "[project]/pages/_app" }, but the module factory is not available. It might have been deleted in an HMR update.
+[01:14:41.975] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[01:14:44.192] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:14:44.290] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:14:44.446] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:14:44.546] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:14:44.629] Browser ERROR   uncaughtError: Error: The default export is not a React Component in "/dashboard/layout"
+[01:17:13.860] Server  LOG     ✓ Compiled in 65ms
+[01:17:14.177] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:17:14.285] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:17:14.390] Browser ERROR   uncaughtError: Error: The default export is not a React Component in "/dashboard/layout"
+[01:20:44.362] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.362] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.363] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.363] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.363] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.363] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.363] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.364] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.384] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.385] Server  ERROR   ⨯ ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+[01:20:44.523] Browser ERROR   ./app/layout.tsx:2:1
+Module not found: Can't resolve '@/components/app-shell-client'
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+Import map: aliased to relative './components/app-shell-client' inside of [project]/
+
+https://nextjs.org/docs/messages/module-not-found
+[01:21:52.294] Browser ERROR   ./app/layout.tsx:2:1
+Export AppShellClient doesn't exist in target module
+  1 | import "./globals.css"
+> 2 | import { AppShellClient } from "@/components/app-shell-client"
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  3 |
+  4 | export const metadata = {
+  5 |   title: "KPI Compliance Tracker",
+
+The export AppShellClient was not found in module [project]/components/app-shell-client.tsx [app-rsc] (ecmascript).
+The module has no exports at all.
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+[01:22:01.125] Server  LOG     ✓ Compiled in 98ms
+[01:22:01.383] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:22:01.474] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:22:01.613] Browser ERROR   uncaughtError: Error: The default export is not a React Component in "/dashboard/layout"
+[01:22:01.614] Browser ERROR   unhandledRejection: Error: Module [next]/entry/page-loader.ts { PAGE => "[project]/node_modules/next/error.js [client] (ecmascript)" } [client] (ecmascript) was instantiated because it was required from module [hmr-entry]/hmr-entry.js { ENTRY => "[project]/pages/_error" }, but the module factory is not available. It might have been deleted in an HMR update.
+[01:34:03.468] Server  LOG     ✓ Compiled in 29ms
+[01:34:03.684] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:34:03.841] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:34:03.948] Browser ERROR   unhandledRejection: Error: Module [next]/entry/page-loader.ts { PAGE => "[project]/node_modules/next/app.js [client] (ecmascript)" } [client] (ecmascript) was instantiated because it was required from module [hmr-entry]/hmr-entry.js { ENTRY => "[project]/pages/_app" }, but the module factory is not available. It might have been deleted in an HMR update.
+[01:34:03.948] Browser ERROR   unhandledRejection: Error: Module [next]/entry/page-loader.ts { PAGE => "[project]/node_modules/next/error.js [client] (ecmascript)" } [client] (ecmascript) was instantiated because it was required from module [hmr-entry]/hmr-entry.js { ENTRY => "[project]/pages/_error" }, but the module factory is not available. It might have been deleted in an HMR update.
+[01:34:09.665] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:34:09.762] Server  ERROR   ⨯ Error: The default export is not a React Component in "/dashboard/layout"
+[01:34:09.851] Browser ERROR   uncaughtError: Error: The default export is not a React Component in "/dashboard/layout"
+[01:34:09.851] Browser ERROR   unhandledRejection: Error: Module [next]/entry/page-loader.ts { PAGE => "[project]/node_modules/next/error.js [client] (ecmascript)" } [client] (ecmascript) was instantiated because it was required from module [hmr-entry]/hmr-entry.js { ENTRY => "[project]/pages/_error" }, but the module factory is not available. It might have been deleted in an HMR update.
