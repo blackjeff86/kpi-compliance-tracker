@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  /* Definindo as cores da VTEX diretamente no tema do Tailwind v4 */
+  --color-vtex-pink: #f71963;
+  --color-vtex-pink-hover: #e01657;
+}
+
+:root {
+  --background: #fdfdfd;
+  --foreground: #111827;
+  --vtex-pink-light: rgba(247, 25, 99, 0.1);
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-image: radial-gradient(#e5e7eb 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+}
+
+/* No Tailwind v4, usamos @utility para criar classes personalizadas */
+@utility btn-vtex {
+  background-color: var(--color-vtex-pink);
+  color: white;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.25rem;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+  &:hover {
+    background-color: var(--color-vtex-pink-hover);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}

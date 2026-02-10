@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///Users/jeff.brito/Documents/KPI%20Compliance%20Tracker/projeto/app/controls/page.tsx"],"sourcesContent":["export default function ControlsPage() {\n    return (\n      <div className=\"p-6 space-y-2\">\n        <h1 className=\"text-2xl font-semibold\">Controles</h1>\n        <p className=\"text-muted-foreground\">\n          Lista de controles (SOX/SOC/ISO/PCI) — em breve com dados do banco.\n        </p>\n      </div>\n    );\n  }\n  "],"names":[],"mappings":";;;;;;AAAe,SAAS;IACpB,qBACE,8OAAC;QAAI,WAAU;;0BACb,8OAAC;gBAAG,WAAU;0BAAyB;;;;;;0BACvC,8OAAC;gBAAE,WAAU;0BAAwB;;;;;;;;;;;;AAK3C"}}]
-}
