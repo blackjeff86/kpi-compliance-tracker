@@ -18,17 +18,33 @@ import {
   Loader2,
   Pencil,
   Calendar,
+  Plus,
+  X,
+  Save,
 } from "lucide-react"
 import { fetchControleByCode } from "../actions"
+import { fetchLatestKpiStatuses, createControlKpi } from "./actions"
 
 type TabKey = "kpis" | "history" | "actions"
+
+type KpiCardItem = {
+  kpi_id_text: string
+  kpi_uuid: string
+  kpi_name: string
+  description: string
+  target: string
+  hasExecutionValue: boolean
+  executionValue: number | null
+  canRegister: boolean
+}
 
 function safeText(v: any) {
   if (v === null || v === undefined) return ""
   return String(v).trim()
 }
 
-function isUuidLike(v: any) {
+// ✅ type-guard (ajuda o TS e melhora o filter)
+function isUuidLike(v: any): v is string {
   const s = safeText(v)
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
 }
@@ -84,6 +100,29 @@ function formatPeriodoLabel(periodoISO: string) {
   return `${monthName} / ${year}`
 }
 
+// ✅ agora entende GREEN/YELLOW/RED também
+function statusLooksOk(status: string) {
+  const s = safeText(status).toLowerCase()
+  return (
+    s.includes("green") ||
+    s.includes("conforme") ||
+    s.includes("conclu") ||
+    s.includes("ok") ||
+    s.includes("done") ||
+    s.includes("aprov")
+  )
+}
+
+function statusLooksPending(status: string) {
+  const s = safeText(status).toLowerCase()
+  return s.includes("yellow") || s.includes("pend") || s.includes("em aberto") || s.includes("open")
+}
+
+function statusLooksRed(status: string) {
+  const s = safeText(status).toLowerCase()
+  return s.includes("red") || s.includes("crit") || s.includes("crít")
+}
+
 export default function DetalheControlePage() {
   const params = useParams()
   const router = useRouter()
@@ -91,13 +130,23 @@ export default function DetalheControlePage() {
 
   const id = params.id as string
 
-  // ✅ período vem da listagem (YYYY-MM). Se não vier, usa o mês atual.
   const periodoFromUrl = safeText(searchParams.get("periodo") || searchParams.get("period"))
   const [periodoISO, setPeriodoISO] = useState<string>(periodoFromUrl || getDefaultPeriodoISO())
 
   const [activeTab, setActiveTab] = useState<TabKey>("kpis")
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+
+  const [kpiRunStatusByUuid, setKpiRunStatusByUuid] = useState<Record<string, string>>({})
+
+  const [isNewKpiModalOpen, setIsNewKpiModalOpen] = useState(false)
+  const [savingNewKpi, setSavingNewKpi] = useState(false)
+  const [newKpi, setNewKpi] = useState({
+    kpi_name: "",
+    kpi_description: "",
+    kpi_type: "",
+    kpi_target: "",
+  })
 
   useEffect(() => {
     async function loadData() {
@@ -113,7 +162,6 @@ export default function DetalheControlePage() {
     if (id) loadData()
   }, [id, periodoISO])
 
-  // ✅ mantém URL sempre com o período selecionado
   useEffect(() => {
     if (!id) return
     const qp = new URLSearchParams(Array.from(searchParams.entries()))
@@ -124,16 +172,12 @@ export default function DetalheControlePage() {
 
   const infoGeral = data
 
-  const kpisList = useMemo(() => {
+  const kpisList = useMemo<KpiCardItem[]>(() => {
     const list = Array.isArray(data?.all_kpis) ? data.all_kpis : []
 
     return list.map((item: any) => {
-      // ✅ o que aparece no card (texto)
       const kpiIdText = safeText(item?.kpi_id || item?.kpi_code || "")
-      // ✅ o que alimenta o botão (UUID real)
-      const kpiUuid = safeText(item?.kpi_uuid)
-
-      // ✅ remove o fallback "Métrica de Controle"
+      const kpiUuid = safeText(item?.kpi_uuid || item?.id || item?.kpi_id_uuid)
       const kpiName = safeText(item?.kpi_name)
 
       const execValue =
@@ -151,7 +195,7 @@ export default function DetalheControlePage() {
           item?.kpi_description ||
           item?.description ||
           `Monitoramento do framework ${item?.framework || infoGeral?.framework || "N/A"}`,
-        target: item?.kpi_target ?? "100%",
+        target: item?.kpi_target ?? "0",
         hasExecutionValue: execValue !== null,
         executionValue: execValue,
         canRegister: isUuidLike(kpiUuid),
@@ -159,16 +203,111 @@ export default function DetalheControlePage() {
     })
   }, [data?.all_kpis, infoGeral?.framework])
 
+  // ✅ agora busca status POR PERÍODO também
+  useEffect(() => {
+    async function loadStatuses() {
+      const uuids: string[] = kpisList
+        .map((k: KpiCardItem) => k.kpi_uuid)
+        .filter((u: string): u is string => isUuidLike(u))
+
+      if (uuids.length === 0) {
+        setKpiRunStatusByUuid({})
+        return
+      }
+
+      const res = await fetchLatestKpiStatuses(uuids, periodoISO)
+      if (res?.success && res.data) setKpiRunStatusByUuid(res.data)
+      else setKpiRunStatusByUuid({})
+    }
+
+    loadStatuses()
+  }, [kpisList, periodoISO])
+
   const onEditarDetalhesTecnicos = () => {
     router.push(`/controles/editar/${encodeURIComponent(id)}?periodo=${encodeURIComponent(periodoISO)}`)
   }
 
-  // ✅ Registrar sempre com kpi_uuid + período ISO
   const irParaExecucao = (kpiUuid: string) => {
     const qp = new URLSearchParams()
-    qp.set("kpi", kpiUuid)       // ✅ UUID
+    qp.set("kpi", kpiUuid)
     qp.set("periodo", periodoISO)
     router.push(`/controles/execucao/${encodeURIComponent(id)}?${qp.toString()}`)
+  }
+
+  const showAddButton = activeTab === "kpis" || activeTab === "actions"
+
+  const onClickAdd = () => {
+    if (activeTab === "kpis") setIsNewKpiModalOpen(true)
+  }
+
+  const resetNewKpi = () => {
+    setNewKpi({
+      kpi_name: "",
+      kpi_description: "",
+      kpi_type: "",
+      kpi_target: "",
+    })
+  }
+
+  const validateNewKpi = () => {
+    if (!safeText(newKpi.kpi_name)) return "Preencha o nome do KPI."
+    if (!safeText(newKpi.kpi_type)) return "Preencha o tipo do KPI."
+    if (!safeText(newKpi.kpi_target)) return "Preencha a meta (target) do KPI."
+    return ""
+  }
+
+  const onSaveNewKpi = async () => {
+    const err = validateNewKpi()
+    if (err) {
+      alert(err)
+      return
+    }
+
+    try {
+      setSavingNewKpi(true)
+
+      const res = await createControlKpi({
+        id_control: id,
+        kpi_name: safeText(newKpi.kpi_name),
+        kpi_description: safeText(newKpi.kpi_description) || null,
+        kpi_type: safeText(newKpi.kpi_type),
+        kpi_target: safeText(newKpi.kpi_target),
+        reference_month: periodoISO,
+      })
+
+      if (!res?.success) {
+        alert(res?.error || "Falha ao criar KPI.")
+        return
+      }
+
+      const created = res.data
+
+      setData((prev: any) => {
+        const prevList = Array.isArray(prev?.all_kpis) ? prev.all_kpis : []
+        return {
+          ...prev,
+          all_kpis: [
+            {
+              kpi_id: created.kpi_id,
+              kpi_uuid: created.kpi_uuid,
+              kpi_name: created.kpi_name,
+              kpi_description: created.kpi_description,
+              kpi_type: created.kpi_type,
+              kpi_target: created.kpi_target,
+              framework: prev?.framework,
+            },
+            ...prevList,
+          ],
+        }
+      })
+
+      setIsNewKpiModalOpen(false)
+      resetNewKpi()
+    } catch (e) {
+      alert("Falha ao criar KPI.")
+    } finally {
+      setSavingNewKpi(false)
+    }
   }
 
   if (loading)
@@ -183,10 +322,7 @@ export default function DetalheControlePage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
         <div className="flex flex-col">
           <nav className="flex items-center space-x-2 text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
-            <Link
-              href={`/controles?periodo=${encodeURIComponent(periodoISO)}`}
-              className="hover:text-[#f71866] transition-colors"
-            >
+            <Link href={`/controles?periodo=${encodeURIComponent(periodoISO)}`} className="hover:text-[#f71866] transition-colors">
               Controles
             </Link>
             <ChevronRight className="h-3 w-3" />
@@ -236,23 +372,60 @@ export default function DetalheControlePage() {
 
           <section className="space-y-6">
             <div className="border-b border-slate-200">
-              <nav className="flex space-x-8">
-                <TabButton active={activeTab === "kpis"} onClick={() => setActiveTab("kpis")} icon={<BarChart3 size={16} />} label="KPIs" badge={kpisList.length} />
-                <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")} icon={<History size={16} />} label="Histórico" />
-                <TabButton active={activeTab === "actions"} onClick={() => setActiveTab("actions")} icon={<ClipboardCheck size={16} />} label="Planos de Ação" badge={infoGeral?.planos?.length || 0} />
-              </nav>
+              <div className="flex items-center justify-between gap-3">
+                <nav className="flex space-x-8">
+                  <TabButton active={activeTab === "kpis"} onClick={() => setActiveTab("kpis")} icon={<BarChart3 size={16} />} label="KPIs" badge={kpisList.length} />
+                  <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")} icon={<History size={16} />} label="Histórico" />
+                  <TabButton
+                    active={activeTab === "actions"}
+                    onClick={() => setActiveTab("actions")}
+                    icon={<ClipboardCheck size={16} />}
+                    label="Planos de Ação"
+                    badge={infoGeral?.planos?.length || 0}
+                  />
+                </nav>
+
+                {showAddButton ? (
+                  <button
+                    onClick={onClickAdd}
+                    className="bg-[#f71866] hover:bg-[#d61556] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-md transition-all active:scale-95 text-xs"
+                    title="Adicionar"
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar
+                  </button>
+                ) : (
+                  <div />
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">
               {activeTab === "kpis" && (
                 <>
                   {kpisList.length > 0 ? (
-                    kpisList.map((kpi: any, index: number) => {
-                      const valueToShow = kpi.hasExecutionValue ? formatPercent(kpi.executionValue) : "pend."
-                      // ✅ título: kpi_id (texto) | kpi_name (sem fallback)
+                    kpisList.map((kpi, index) => {
+                      const runStatusRaw =
+                        kpi.kpi_uuid && kpiRunStatusByUuid[kpi.kpi_uuid] ? kpiRunStatusByUuid[kpi.kpi_uuid] : ""
+
+                      const hasRun = !!safeText(runStatusRaw)
+
+                      // ✅ mostra status do banco (GREEN/YELLOW/RED) quando existir
+                      const valueToShow = hasRun ? safeText(runStatusRaw) : "PEND."
+                      const metaToShow = `Meta: ${safeText(kpi.target) || "0"}`
+
                       const left = kpi.kpi_id_text || "KPI"
                       const right = kpi.kpi_name ? ` | ${kpi.kpi_name}` : ""
                       const title = `${left}${right}`
+
+                      const visualStatus = hasRun
+                        ? statusLooksOk(runStatusRaw)
+                          ? "success"
+                          : statusLooksRed(runStatusRaw)
+                          ? "warning"
+                          : statusLooksPending(runStatusRaw)
+                          ? "pending"
+                          : "neutral"
+                        : "pending"
 
                       return (
                         <KPIItem
@@ -260,16 +433,17 @@ export default function DetalheControlePage() {
                           title={title}
                           desc={kpi.description}
                           value={valueToShow}
-                          meta={`Meta: ${kpi.target}`}
-                          status={kpi.hasExecutionValue ? "success" : "pending"}
+                          meta={metaToShow}
+                          status={visualStatus}
                           disabled={!kpi.canRegister}
                           onRegister={() => {
                             if (!kpi.canRegister) {
                               console.error("KPI sem kpi_uuid válido no retorno do backend:", kpi)
                               return
                             }
-                            irParaExecucao(kpi.kpi_uuid) // ✅ usa UUID real
+                            irParaExecucao(kpi.kpi_uuid)
                           }}
+                          showPendingIcon={!hasRun}
                         />
                       )
                     })
@@ -293,7 +467,9 @@ export default function DetalheControlePage() {
                         </div>
                         <span
                           className={`font-bold px-2 py-1 rounded text-[10px] uppercase ${
-                            h.status === "Conforme" || h.status === "Concluido" ? "text-emerald-500 bg-emerald-50" : "text-red-500 bg-red-50"
+                            h.status === "Conforme" || h.status === "Concluido"
+                              ? "text-emerald-500 bg-emerald-50"
+                              : "text-red-500 bg-red-50"
                           }`}
                         >
                           {h.status}
@@ -419,6 +595,97 @@ export default function DetalheControlePage() {
           </div>
         </aside>
       </div>
+
+      {isNewKpiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => {
+              if (savingNewKpi) return
+              setIsNewKpiModalOpen(false)
+              resetNewKpi()
+            }}
+          />
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl relative z-10 overflow-hidden">
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Adicionar KPI</h3>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  Esse KPI será vinculado ao controle <span className="font-mono font-bold">{id}</span>
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  if (savingNewKpi) return
+                  setIsNewKpiModalOpen(false)
+                  resetNewKpi()
+                }}
+                className="p-2 rounded-full border border-slate-100 text-slate-400 hover:text-[#f71866] hover:bg-[#f71866]/5 transition-all"
+                title="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field
+                  label="kpi_name"
+                  placeholder="Ex.: Continuidade revisada"
+                  value={newKpi.kpi_name}
+                  onChange={(v: string) => setNewKpi((p) => ({ ...p, kpi_name: v }))}
+                />
+                <Field
+                  label="kpi_type"
+                  placeholder="Manual ou Automatizado"
+                  value={newKpi.kpi_type}
+                  onChange={(v: string) => setNewKpi((p) => ({ ...p, kpi_type: v }))}
+                />
+              </div>
+
+              <Field
+                label="kpi_description"
+                placeholder="Descreva o KPI"
+                value={newKpi.kpi_description}
+                onChange={(v: string) => setNewKpi((p) => ({ ...p, kpi_description: v }))}
+                textarea
+              />
+
+              <Field
+                label="kpi_target"
+                placeholder="Ex.: 0 ou 100% (como você usa hoje)"
+                value={newKpi.kpi_target}
+                onChange={(v: string) => setNewKpi((p) => ({ ...p, kpi_target: v }))}
+              />
+            </div>
+
+            <div className="p-4 bg-slate-50 flex items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  if (savingNewKpi) return
+                  setIsNewKpiModalOpen(false)
+                  resetNewKpi()
+                }}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={onSaveNewKpi}
+                disabled={savingNewKpi}
+                className={`px-5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-all ${
+                  savingNewKpi ? "bg-slate-300 text-white" : "bg-[#f71866] hover:bg-[#d61556] text-white"
+                }`}
+              >
+                {savingNewKpi ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                Salvar KPI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -454,28 +721,27 @@ function InfoCard({ icon, label, value }: any) {
   )
 }
 
-function KPIItem({ title, desc, value, meta, status, hasWarning, onRegister, disabled }: any) {
+function KPIItem({ title, desc, value, meta, status, onRegister, disabled, showPendingIcon }: any) {
+  const statusClass =
+    status === "success"
+      ? "text-emerald-500 text-lg"
+      : status === "pending"
+      ? "text-[#f71866] text-sm uppercase tracking-widest font-black"
+      : status === "warning"
+      ? "text-amber-600 text-lg"
+      : "text-slate-600 text-lg"
+
   return (
     <div className="bg-white p-6 rounded-xl border transition-all flex items-center justify-between border-slate-100 shadow-sm hover:border-[#f71866]/20">
       <div className="flex flex-col gap-1.5">
-        <h3 className="font-semibold text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">
-          {title}
-          {hasWarning && <AlertCircle size={14} className="text-red-500" />}
-        </h3>
+        <h3 className="font-semibold text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">{title}</h3>
         <p className="text-[11px] text-slate-500 font-medium max-w-sm leading-relaxed">{desc}</p>
       </div>
 
       <div className="flex items-center gap-10">
         <div className="text-right">
-          <div
-            className={`font-semibold tracking-tight ${
-              status === "success"
-                ? "text-lg text-emerald-500"
-                : status === "pending"
-                ? "text-sm text-[#f71866] uppercase tracking-widest font-black"
-                : "text-lg text-slate-600"
-            }`}
-          >
+          <div className={`font-semibold tracking-tight flex items-center justify-end gap-1.5 ${statusClass}`}>
+            {showPendingIcon ? <AlertCircle size={14} className="text-[#f71866]" /> : null}
             {value}
           </div>
           <div className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-1">{meta}</div>
@@ -494,6 +760,29 @@ function KPIItem({ title, desc, value, meta, status, hasWarning, onRegister, dis
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+function Field({ label, value, onChange, placeholder, textarea }: any) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</div>
+      {textarea ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full min-h-[90px] px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#f71866]/10 focus:border-[#f71866]"
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#f71866]/10 focus:border-[#f71866]"
+        />
+      )}
     </div>
   )
 }

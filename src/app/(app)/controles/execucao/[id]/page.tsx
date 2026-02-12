@@ -92,7 +92,8 @@ export default function RegistrarExecucaoPage() {
   const [kpi, setKpi] = useState<any>(null)
   const [run, setRun] = useState<any>(null)
 
-  const [resultado, setResultado] = useState<number>(85)
+  // ✅ Começa vazio (controlado como string)
+  const [resultado, setResultado] = useState<string>("")
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [notes, setNotes] = useState<string>("")
 
@@ -147,10 +148,14 @@ export default function RegistrarExecucaoPage() {
         setKpi(kpi)
         setRun(run || null)
 
+        // ✅ Se já existe run, preenche; senão mantém vazio
         if (run?.measured_value !== null && run?.measured_value !== undefined) {
           const n = parseNumberLoose(run.measured_value)
-          if (n !== null) setResultado(n)
+          if (n !== null) setResultado(String(n))
+        } else {
+          setResultado("")
         }
+
         if (run?.executor_comment) setNotes(String(run.executor_comment))
       } catch (e) {
         setLoadError("Erro ao conectar com o servidor.")
@@ -167,12 +172,22 @@ export default function RegistrarExecucaoPage() {
     return t === null ? 95 : t
   }, [kpi?.kpi_target])
 
-  const isBelowThreshold = resultado < threshold
+  // ✅ Só calcula abaixo da meta se houver número válido
+  const resultadoNumber = useMemo(() => parseNumberLoose(resultado), [resultado])
+  const hasResultado = resultadoNumber !== null
+  const isBelowThreshold = hasResultado ? resultadoNumber! < threshold : false
 
   async function onSave() {
     const kpiUuid = safeText(kpi?.kpi_uuid)
     if (!kpiUuid) {
       setSaveError("Este KPI ainda não possui kpi_uuid. Gere/preencha no control_kpis.")
+      return
+    }
+
+    // ✅ valida antes de salvar (não aceita vazio)
+    const measured = parseNumberLoose(resultado)
+    if (measured === null) {
+      setSaveError("Preencha o Resultado da Verificação com um número válido.")
       return
     }
 
@@ -184,7 +199,7 @@ export default function RegistrarExecucaoPage() {
         id_control: id,
         kpi_id: kpiUuid, // ✅ salva por kpi_uuid
         period: periodoISO,
-        measured_value: resultado,
+        measured_value: measured,
         executor_comment: notes || null,
         evidence_link: arquivo ? arquivo.name : null,
         created_by_email: null,
@@ -232,6 +247,16 @@ export default function RegistrarExecucaoPage() {
       </div>
     )
   }
+
+  // ✅ dados do KPI (para o card)
+  const kpiIdText = safeText(kpi?.kpi_id || "")
+  const kpiNameText = safeText(kpi?.kpi_name || "")
+  const kpiDescText = safeText(kpi?.kpi_description || "")
+  const kpiTypeText = safeText(kpi?.kpi_type || "")
+  const kpiTargetText = safeText(kpi?.kpi_target || "")
+
+  // ✅ cor do input: cinza se vazio; verde/vermelho se preenchido
+  const resultadoColorClass = !hasResultado ? "text-slate-400" : isBelowThreshold ? "text-red-500" : "text-emerald-500"
 
   return (
     <div className="min-h-screen bg-[#f8f5f6] text-slate-800 font-sans animate-in fade-in duration-500">
@@ -302,6 +327,55 @@ export default function RegistrarExecucaoPage() {
           </div>
         </section>
 
+        {/* ✅ Detalhes do KPI */}
+        <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Target size={16} className="text-[#f71866]" />
+              <h2 className="font-bold text-slate-800 text-[11px] uppercase tracking-widest">Detalhes do KPI</h2>
+            </div>
+
+            {!!kpiTypeText && (
+              <div className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border border-slate-200 text-slate-600 bg-white">
+                {kpiTypeText}
+              </div>
+            )}
+          </div>
+
+          <div className="p-6 md:p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">
+                  KPI ID
+                </span>
+                <div className="text-sm font-extrabold text-slate-800 break-words">{kpiIdText || "N/A"}</div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">
+                  Nome do KPI
+                </span>
+                <div className="text-sm font-extrabold text-slate-800 break-words">{kpiNameText || "N/A"}</div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">
+                  Meta (Target)
+                </span>
+                <div className="text-sm font-extrabold text-slate-800 break-words">{kpiTargetText || "N/A"}</div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-100 rounded-xl p-5">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">
+                Descrição do KPI
+              </span>
+              <p className="text-[12px] text-slate-600 leading-relaxed whitespace-pre-wrap">{kpiDescText || "N/A"}</p>
+            </div>
+          </div>
+        </section>
+
+        {/* ✅ Evidência */}
         <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -309,7 +383,7 @@ export default function RegistrarExecucaoPage() {
               <h2 className="font-bold text-slate-800 text-[11px] uppercase tracking-widest">Detalhes da Evidência</h2>
             </div>
 
-            {isBelowThreshold && (
+            {hasResultado && isBelowThreshold && (
               <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full text-[9px] font-black uppercase tracking-tighter border border-red-100">
                 <AlertCircle size={10} /> Meta não atingida
               </div>
@@ -326,10 +400,9 @@ export default function RegistrarExecucaoPage() {
                   <input
                     type="number"
                     value={resultado}
-                    onChange={(e) => setResultado(Number(e.target.value))}
-                    className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3.5 text-xl font-bold outline-none transition-all focus:ring-2 focus:ring-[#f71866]/10 focus:border-[#f71866] ${
-                      isBelowThreshold ? "text-red-500" : "text-emerald-500"
-                    }`}
+                    onChange={(e) => setResultado(e.target.value)}
+                    className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3.5 text-xl font-bold outline-none transition-all focus:ring-2 focus:ring-[#f71866]/10 focus:border-[#f71866] ${resultadoColorClass}`}
+                    placeholder=""
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold">%</span>
                 </div>

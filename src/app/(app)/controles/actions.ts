@@ -18,6 +18,28 @@ function safeNumber(v: any) {
 }
 
 /**
+ * ✅ Normaliza status para o enum do banco (kpi_status):
+ * - GREEN | YELLOW | RED
+ */
+function normalizeKpiStatus(v: any): "GREEN" | "YELLOW" | "RED" | null {
+  const s = (v ?? "").toString().trim()
+  if (!s) return null
+
+  const up = s.toUpperCase()
+
+  // já vem certo
+  if (up === "GREEN" || up === "YELLOW" || up === "RED") return up as any
+
+  // legados / pt-br (caso algum lugar mande texto humano)
+  if (up.includes("META ATINGIDA") || up.includes("ATINGIDA") || up.includes("OK") || up.includes("CONFORME")) return "GREEN"
+  if (up.includes("CRIT") || up.includes("CRÍT") || up.includes("RED")) return "RED"
+  if (up.includes("ATEN") || up.includes("PEND") || up.includes("YELLOW")) return "YELLOW"
+
+  // fallback seguro
+  return "YELLOW"
+}
+
+/**
  * ✅ Lista controles (1 por id_control)
  */
 export async function fetchControles() {
@@ -47,7 +69,7 @@ export async function fetchControleByCode(code: string, _periodoISO?: string) {
 
     const baseControl = baseRows[0]
 
-    // ✅ KPIs do controle (AGORA TRAZ kpi_uuid)
+    // ✅ KPIs do controle (TRAZ kpi_uuid)
     const kpis = await sql`
       SELECT 
         id_control,
@@ -89,9 +111,65 @@ export async function fetchControleByCode(code: string, _periodoISO?: string) {
 }
 
 /**
- * ✅ KPIs page:
- * - catálogo: control_kpis (agrupado por kpi_id)
- * - last/previous: kpi_runs usando kpi_code (TEXT) + period
+ * Helpers de período para a tela de KPIs
+ * - Aceita:
+ *   - "fevereiro / 2026"
+ *   - "2026-02"
+ */
+const MONTHS_PT_MAP: Record<string, string> = {
+  janeiro: "01",
+  fevereiro: "02",
+  marco: "03",
+  "março": "03",
+  abril: "04",
+  maio: "05",
+  junho: "06",
+  julho: "07",
+  agosto: "08",
+  setembro: "09",
+  outubro: "10",
+  novembro: "11",
+  dezembro: "12",
+}
+
+function monthLabelToISO(label: string | null) {
+  const raw = (label || "").toString().trim()
+  if (!raw) return null
+
+  // já está no formato ISO
+  if (/^\d{4}-\d{2}$/.test(raw)) return raw
+
+  const m = raw.toLowerCase().match(/^([a-zçãõ]+)\s*\/\s*(\d{4})$/i)
+  if (!m) return null
+
+  const monthName = m[1]
+  const year = m[2]
+  const mm = MONTHS_PT_MAP[monthName]
+  if (!mm) return null
+
+  return `${year}-${mm}`
+}
+
+function prevMonthISO(periodISO: string) {
+  const m = periodISO.match(/^(\d{4})-(\d{2})$/)
+  if (!m) return null
+  let y = Number(m[1])
+  let mm = Number(m[2])
+
+  mm -= 1
+  if (mm === 0) {
+    mm = 12
+    y -= 1
+  }
+  return `${y}-${String(mm).padStart(2, "0")}`
+}
+
+/**
+ * ✅ KPIs page (CORRIGIDO):
+ * - catálogo: control_kpis (1 linha por kpi_id)
+ * - last/previous: kpi_runs usando kpi_uuid + period
+ * - NÃO usa MAX(uuid)
+ * - entende month como "fevereiro / 2026" (UI) ou "2026-02"
  */
 export async function fetchKPIs(params?: {
   month?: string
@@ -103,58 +181,65 @@ export async function fetchKPIs(params?: {
     const page = Math.max(1, Number(params?.page || 1))
     const pageSize = Math.min(100, Math.max(1, Number(params?.pageSize || 12)))
     const offset = (page - 1) * pageSize
-    const month = safeText(params?.month) // ex: "2026-01"
+
+    const monthRaw = safeText(params?.month)
+    const monthISO = monthLabelToISO(monthRaw) // ✅ converte "fevereiro / 2026" -> "2026-02"
+    const prevISO = monthISO ? prevMonthISO(monthISO) : null
+
     const kpiType = safeText(params?.kpiType)
 
+    // total para paginação
     const totalRows = await sql`
-      SELECT COUNT(DISTINCT ck.kpi_id) AS total
+      SELECT COUNT(DISTINCT ck.kpi_id)::int AS total
       FROM control_kpis ck
       WHERE (${kpiType}::text IS NULL OR ck.kpi_type = ${kpiType})
     `
     const total = Number(totalRows?.[0]?.total || 0)
 
+    // se não tem KPI nenhum, devolve vazio sem erro
+    if (total === 0) {
+      return { success: true as const, data: [] as any[], total: 0 }
+    }
+
     const data = await sql`
       WITH kpi_catalog AS (
-        SELECT
+        -- ✅ 1 linha por kpi_id, pegando o registro mais recente do catalog (sem MAX(uuid))
+        SELECT DISTINCT ON (ck.kpi_id)
           ck.kpi_id,
-          COALESCE(MAX(ck.kpi_name), 'Indicador')        AS kpi_name,
-          COALESCE(MAX(ck.kpi_description), '')          AS kpi_description,
-          COALESCE(MAX(ck.kpi_type), 'Manual')           AS kpi_type,
-          COALESCE(MAX(ck.kpi_target), '0')              AS kpi_target,
-
-          MIN(COALESCE(c.framework, 'N/A'))              AS framework,
-          MIN(COALESCE(c.owner_area, 'Geral'))           AS kpi_category
+          ck.kpi_uuid,
+          COALESCE(ck.kpi_name, 'Indicador')      AS kpi_name,
+          COALESCE(ck.kpi_description, '')        AS kpi_description,
+          COALESCE(ck.kpi_type, 'Manual')         AS kpi_type,
+          COALESCE(ck.kpi_target, '0')            AS kpi_target,
+          COALESCE(c.framework, 'N/A')            AS framework,
+          COALESCE(c.owner_area, 'Geral')         AS kpi_category
         FROM control_kpis ck
         LEFT JOIN controls c ON c.id_control = ck.id_control
         WHERE (${kpiType}::text IS NULL OR ck.kpi_type = ${kpiType})
-        GROUP BY ck.kpi_id
+        ORDER BY ck.kpi_id, ck.updated_at DESC NULLS LAST, ck.created_at DESC
       ),
 
       last_run AS (
-        SELECT DISTINCT ON (kr.kpi_code)
-          kr.kpi_code,
+        -- ✅ último run do MÊS selecionado por kpi_uuid
+        SELECT DISTINCT ON (kr.kpi_uuid)
+          kr.kpi_uuid,
           kr.period,
           kr.measured_value,
           kr.status,
-          kr.evidence_link,
-          kr.executor_comment,
-          kr.created_by_email,
           kr.updated_at,
           kr.created_at
         FROM kpi_runs kr
         WHERE
           kr.is_latest = TRUE
-          AND kr.kpi_code IS NOT NULL
-          AND (
-            ${month}::text IS NULL
-            OR kr.period = ${month}
-          )
-        ORDER BY kr.kpi_code, kr.updated_at DESC NULLS LAST, kr.created_at DESC
+          AND kr.kpi_uuid IS NOT NULL
+          AND (${monthISO}::text IS NOT NULL AND kr.period = ${monthISO})
+        ORDER BY kr.kpi_uuid, kr.updated_at DESC NULLS LAST, kr.created_at DESC
       ),
 
       prev_run AS (
-        SELECT DISTINCT ON (kr.kpi_code)
-          kr.kpi_code,
+        -- ✅ último run do mês anterior (para trend)
+        SELECT DISTINCT ON (kr.kpi_uuid)
+          kr.kpi_uuid,
           kr.period,
           kr.measured_value,
           kr.status,
@@ -163,16 +248,14 @@ export async function fetchKPIs(params?: {
         FROM kpi_runs kr
         WHERE
           kr.is_latest = TRUE
-          AND kr.kpi_code IS NOT NULL
-          AND (
-            ${month}::text IS NULL
-            OR kr.period <> ${month}
-          )
-        ORDER BY kr.kpi_code, kr.updated_at DESC NULLS LAST, kr.created_at DESC
+          AND kr.kpi_uuid IS NOT NULL
+          AND (${prevISO}::text IS NOT NULL AND kr.period = ${prevISO})
+        ORDER BY kr.kpi_uuid, kr.updated_at DESC NULLS LAST, kr.created_at DESC
       )
 
       SELECT
         kc.kpi_id,
+        kc.kpi_uuid,
         kc.kpi_name,
         kc.kpi_description,
         kc.kpi_type,
@@ -186,8 +269,8 @@ export async function fetchKPIs(params?: {
         lr.status               AS last_status
 
       FROM kpi_catalog kc
-      LEFT JOIN last_run lr ON lr.kpi_code = kc.kpi_id
-      LEFT JOIN prev_run pr ON pr.kpi_code = kc.kpi_id
+      LEFT JOIN last_run lr ON lr.kpi_uuid = kc.kpi_uuid
+      LEFT JOIN prev_run pr ON pr.kpi_uuid = kc.kpi_uuid
       ORDER BY kc.kpi_id ASC
       LIMIT ${pageSize}
       OFFSET ${offset}
@@ -202,10 +285,11 @@ export async function fetchKPIs(params?: {
 
 /**
  * ✅ Para salvar execução diretamente (opcional)
- * Mantive para compatibilidade, usando kpi_code.
+ * Agora resolve kpi_uuid via control_kpis (porque kpi_runs NÃO tem kpi_code)
+ * ✅ Normaliza status para o enum: GREEN|YELLOW|RED
  */
 export async function upsertKpiRun(input: {
-  kpi_code: string
+  kpi_code: string // aqui é o "kpi_id" texto (ex: "KPI ID 166")
   period: string
   measured_value: number | string
   status?: string
@@ -226,22 +310,40 @@ export async function upsertKpiRun(input: {
     if (!period) return { success: false as const, error: "period é obrigatório." }
     if (measured_value === null) return { success: false as const, error: "measured_value inválido." }
 
-    const status = safeText(input.status) || null
+    // ✅ status SEMPRE compatível com o enum do banco
+    const status = normalizeKpiStatus(input.status) // pode ser null
     const evidence_link = safeText(input.evidence_link)
     const executor_comment = safeText(input.executor_comment)
     const created_by_email = safeText(input.created_by_email)
 
+    // ✅ resolve UUID do KPI
+    const kpiRows = await sql`
+      SELECT kpi_uuid
+      FROM control_kpis
+      WHERE kpi_id = ${kpi_code}
+      ORDER BY updated_at DESC NULLS LAST, created_at DESC
+      LIMIT 1
+    `
+    if (!kpiRows?.length || !kpiRows[0]?.kpi_uuid) {
+      return { success: false as const, error: "Não foi possível resolver kpi_uuid para este kpi_code." }
+    }
+    const kpi_uuid = kpiRows[0].kpi_uuid
+
+    // desmarca latest anterior
     await sql`
       UPDATE kpi_runs
       SET is_latest = FALSE,
           updated_at = now()
-      WHERE kpi_code = ${kpi_code}
+      WHERE kpi_uuid = ${kpi_uuid}
         AND period = ${period}
         AND is_latest = TRUE
     `
 
+    // insere novo latest
     const inserted = await sql`
       INSERT INTO kpi_runs (
+        kpi_id,
+        kpi_uuid,
         kpi_code,
         period,
         measured_value,
@@ -253,9 +355,11 @@ export async function upsertKpiRun(input: {
         created_at,
         updated_at
       ) VALUES (
+        NULL,
+        ${kpi_uuid},
         ${kpi_code},
         ${period},
-        ${measured_value},
+        ${String(measured_value)},
         ${status},
         ${evidence_link},
         ${executor_comment},
@@ -278,8 +382,8 @@ export async function upsertKpiRun(input: {
  * Importação:
  * - Garante 1 linha por controle em `controls`
  * - Garante N linhas em `control_kpis`
- * ✅ AGORA garante kpi_uuid (UUID) para o botão Registrar funcionar
- * ✅ NÃO apaga todos os KPIs (para não quebrar kpi_runs já gravados)
+ * ✅ garante kpi_uuid (UUID)
+ * ✅ NÃO apaga todos os KPIs (para não quebrar runs já gravados)
  */
 export async function importarControles(controles: any[]) {
   try {
@@ -362,9 +466,6 @@ export async function importarControles(controles: any[]) {
         if (seen.has(row.kpi_id)) continue
         seen.add(row.kpi_id)
 
-        // ✅ garante kpi_uuid:
-        // - no insert: gen_random_uuid()
-        // - no update: se estiver NULL, preenche com gen_random_uuid()
         await sql`
           INSERT INTO control_kpis (
             id_control,
@@ -396,7 +497,7 @@ export async function importarControles(controles: any[]) {
         `
       }
 
-      // ✅ (Opcional e seguro): se existir algum KPI antigo sem kpi_uuid, preenche
+      // preenche kpi_uuid faltante
       await sql`
         UPDATE control_kpis
         SET kpi_uuid = COALESCE(kpi_uuid, gen_random_uuid()),

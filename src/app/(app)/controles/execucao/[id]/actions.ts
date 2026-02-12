@@ -22,22 +22,32 @@ function parseNumberLoose(v: any): number | null {
   return null
 }
 
-function computeKpiStatus(metaRaw: any, atualRaw: any) {
+/**
+ * ✅ PADRÃO do ENUM kpi_status no banco:
+ * - GREEN
+ * - YELLOW
+ * - RED
+ */
+function computeKpiStatus(metaRaw: any, atualRaw: any): "GREEN" | "YELLOW" | "RED" {
   const metaN = parseNumberLoose(metaRaw)
   const atualN = parseNumberLoose(atualRaw)
 
-  if (metaN === null || atualN === null) return "Pendente"
+  // se não dá pra calcular, fica YELLOW
+  if (metaN === null || atualN === null) return "YELLOW"
 
+  // regra:
+  // - meta = 0 => "quanto menor melhor" (ex.: pendências)
+  // - meta > 0 => "quanto maior melhor" (ex.: % conformidade)
   const lowerIsBetter = metaN === 0
-  const ok = lowerIsBetter ? atualN <= metaN : atualN >= metaN
-  const critical = !ok && lowerIsBetter && atualN > 0
 
-  if (ok) return "Meta Atingida"
-  if (critical) return "Crítico"
-  return "Em Atenção"
+  const ok = lowerIsBetter ? atualN <= metaN : atualN >= metaN
+  const critical = lowerIsBetter ? atualN > metaN : false
+
+  if (ok) return "GREEN"
+  if (critical) return "RED"
+  return "YELLOW"
 }
 
-// Detecta UUID em string
 function isUuidLike(v: any) {
   const s = String(v || "").trim()
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
@@ -50,12 +60,16 @@ function isUuidLike(v: any) {
  *    a) kpi_uuid (UUID)  OU
  *    b) kpi_id (TEXT "KPI ID 166") OU
  *    c) kpi_name (TEXT)
- * - execução do período (kpi_runs) usando kpi_uuid + period
+ * - execução do período (kpi_runs) usando:
+ *    kpi_runs.kpi_uuid (UUID) + period
+ *
+ * ⚠️ IMPORTANTE:
+ * kpi_runs.kpi_id tem FK para kpis(id), então aqui usamos kpi_uuid mesmo.
  */
 export async function fetchExecucaoContext(params: {
   id_control: string
-  kpi: string // pode ser kpi_uuid OU kpi_id (texto) OU kpi_name
-  period: string // YYYY-MM
+  kpi: string
+  period: string
 }) {
   try {
     const id_control = safeText(params.id_control)
@@ -75,9 +89,7 @@ export async function fetchExecucaoContext(params: {
     if (!controlsRows?.length) return { success: false, error: "Controle não encontrado." }
     const control = controlsRows[0]
 
-    // ✅ Resolve KPI SEM tentar comparar TEXT com UUID.
-    // - Se vier UUID: compara com kpi_uuid
-    // - Senão: compara com kpi_id (texto) ou kpi_name
+    // Resolve KPI no control_kpis
     const kpiRows = isUuidLike(kpi)
       ? await sql`
           SELECT *
@@ -99,9 +111,9 @@ export async function fetchExecucaoContext(params: {
     const kpiRow = kpiRows[0]
 
     const kpiUuid = kpiRow.kpi_uuid
-    if (!kpiUuid) return { success: false, error: "KPI sem kpi_uuid. Gere e preencha essa coluna no control_kpis." }
+    if (!kpiUuid) return { success: false, error: "KPI sem kpi_uuid em control_kpis." }
 
-    // ✅ Busca execução por kpi_uuid + period (sem kpi_code)
+    // ✅ Busca execução por kpi_runs.kpi_uuid + period (sem FK)
     const runRows = await sql`
       SELECT *
       FROM kpi_runs
@@ -123,21 +135,21 @@ export async function fetchExecucaoContext(params: {
     }
   } catch (error: any) {
     console.error("Erro fetchExecucaoContext:", error)
-    return {
-      success: false,
-      error: `Erro ao carregar dados da execução. Detalhe: ${error?.message || "desconhecido"}`,
-    }
+    return { success: false, error: `Erro ao carregar dados da execução. Detalhe: ${error?.message || "desconhecido"}` }
   }
 }
 
 /**
  * Salva execução do KPI no período (kpi_runs):
- * - resolve o KPI para kpi_uuid (control_kpis.kpi_uuid)
+ * - resolve o KPI para control_kpis.kpi_uuid
+ * - grava em kpi_runs.kpi_uuid (UUID)  ✅ (sem FK)
+ * - opcionalmente grava kpi_code (texto) para compatibilidade
  * - garante 1 latest por (kpi_uuid, period)
+ * - created_by_email é NOT NULL -> sempre preencher
  */
 export async function saveKpiExecution(payload: {
   id_control: string
-  kpi_id: string // pode vir como kpi_uuid OU kpi_id(texto) OU kpi_name
+  kpi_id: string
   period: string
   measured_value: number | null
   executor_comment: string | null
@@ -156,21 +168,21 @@ export async function saveKpiExecution(payload: {
     const measured_value = payload.measured_value === null ? null : parseNumberLoose(payload.measured_value)
     if (measured_value === null) return { success: false, error: "measured_value inválido." }
 
-    // ✅ resolve para kpi_uuid
+    // resolve para control_kpis.kpi_uuid + pega meta + pega kpi_id(texto) pra salvar em kpi_code (opcional)
     const kpiRows = isUuidLike(kpi_ref)
       ? await sql`
-          SELECT kpi_uuid, kpi_target
+          SELECT kpi_uuid, kpi_target, kpi_id
           FROM control_kpis
           WHERE id_control = ${id_control}
             AND kpi_uuid = (${kpi_ref})::uuid
           LIMIT 1
         `
       : await sql`
-          SELECT kpi_uuid, kpi_target
+          SELECT kpi_uuid, kpi_target, kpi_id
           FROM control_kpis
           WHERE id_control = ${id_control}
             AND (kpi_id = ${kpi_ref} OR kpi_name = ${kpi_ref})
-          ORDER BY created_at DESC NULLS LAST
+          ORDER BY updated_at DESC NULLS LAST, created_at DESC
           LIMIT 1
         `
 
@@ -178,12 +190,17 @@ export async function saveKpiExecution(payload: {
 
     const kpiUuid = kpiRows[0].kpi_uuid
     const meta = kpiRows[0].kpi_target
+    const kpiCodeText = safeText(kpiRows[0].kpi_id) // ex: "KPI ID 166"
 
-    if (!kpiUuid) return { success: false, error: "KPI sem kpi_uuid. Gere e preencha essa coluna no control_kpis." }
+    if (!kpiUuid) return { success: false, error: "KPI sem kpi_uuid em control_kpis." }
 
     const kpiStatus = computeKpiStatus(meta, measured_value)
 
-    // 1) desmarca latest anterior
+    // created_by_email é NOT NULL no seu banco -> default seguro
+    const createdBy =
+      safeText(payload.created_by_email) || "system@grc.local"
+
+    // 1) desmarca latest anterior por (kpi_uuid, period)
     await sql`
       UPDATE kpi_runs
       SET is_latest = FALSE,
@@ -194,9 +211,12 @@ export async function saveKpiExecution(payload: {
     `
 
     // 2) insere novo latest
+    // ⚠️ kpi_id (FK para kpis.id) deixamos NULL para não estourar FK
     const inserted = await sql`
       INSERT INTO kpi_runs (
+        kpi_id,
         kpi_uuid,
+        kpi_code,
         period,
         measured_value,
         status,
@@ -207,13 +227,15 @@ export async function saveKpiExecution(payload: {
         created_at,
         updated_at
       ) VALUES (
+        NULL,
         ${kpiUuid},
+        ${kpiCodeText},
         ${period},
         ${String(measured_value)},
         ${kpiStatus},
         ${safeText(payload.evidence_link)},
         ${safeText(payload.executor_comment)},
-        ${safeText(payload.created_by_email)},
+        ${createdBy},
         TRUE,
         now(),
         now()
