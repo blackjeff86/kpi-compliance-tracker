@@ -2,7 +2,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Search,
   Plus,
@@ -12,7 +12,7 @@ import {
   Target,
   TrendingUp,
   AlertCircle,
-  Loader2
+  Loader2,
 } from "lucide-react"
 
 // ✅ Buscando direto do banco via Server Action
@@ -31,6 +31,11 @@ type KPIRecord = {
   atual: string
   status: string
   corStatus: string
+}
+
+function safeText(v: any) {
+  if (v === null || v === undefined) return ""
+  return String(v).trim()
 }
 
 function parseNumberLoose(v: any): number | null {
@@ -77,7 +82,7 @@ function normalizeKpiType(v: any): string {
 /** Month helpers (ISO YYYY-MM) */
 const MONTHS_PT = [
   "janeiro","fevereiro","março","abril","maio","junho",
-  "julho","agosto","setembro","outubro","novembro","dezembro"
+  "julho","agosto","setembro","outubro","novembro","dezembro",
 ]
 
 function formatPeriodoLabel(periodoISO: string) {
@@ -99,13 +104,11 @@ function getCurrentMonthISO() {
 
 function buildMonthOptions(startYear = 2025, endYear?: number) {
   const nowYear = new Date().getFullYear()
-  const yEnd = Number.isFinite(endYear as any) ? Number(endYear) : nowYear + 1 // inclui próximo ano
+  const yEnd = Number.isFinite(endYear as any) ? Number(endYear) : nowYear + 1
   const out: string[] = []
 
   for (let y = yEnd; y >= startYear; y--) {
-    for (let m = 12; m >= 1; m--) {
-      out.push(`${y}-${String(m).padStart(2, "0")}`)
-    }
+    for (let m = 12; m >= 1; m--) out.push(`${y}-${String(m).padStart(2, "0")}`)
   }
   return out
 }
@@ -115,7 +118,6 @@ function mapRunStatusToUi(statusRaw: any): { label: string; dot: string; text: s
   const s = String(statusRaw || "").trim().toUpperCase()
 
   if (!s) return { label: "PEND.", dot: "bg-amber-500", text: "text-amber-600" }
-
   if (s.includes("GREEN")) return { label: "Meta Atingida", dot: "bg-emerald-500", text: "text-emerald-600" }
   if (s.includes("RED")) return { label: "Crítico", dot: "bg-red-500", text: "text-red-600" }
   if (s.includes("YELLOW")) return { label: "Em Atenção", dot: "bg-amber-500", text: "text-amber-600" }
@@ -123,8 +125,36 @@ function mapRunStatusToUi(statusRaw: any): { label: string; dot: string; text: s
   return { label: s, dot: "bg-amber-500", text: "text-amber-600" }
 }
 
+function clampPage(n: number) {
+  const x = Number(n)
+  if (!Number.isFinite(x) || x < 1) return 1
+  return Math.floor(x)
+}
+
+function buildKpisQuery(params: {
+  periodo?: string
+  q?: string
+  framework?: string
+  tipo?: string
+  status?: string
+  page?: number
+}) {
+  const sp = new URLSearchParams()
+
+  if (params.periodo) sp.set("periodo", params.periodo)
+  if (params.q) sp.set("q", params.q)
+  if (params.framework && params.framework !== "Todos") sp.set("framework", params.framework)
+  if (params.tipo && params.tipo !== "Todos") sp.set("tipo", params.tipo)
+  if (params.status && params.status !== "Todos") sp.set("status", params.status)
+  if (params.page && params.page !== 1) sp.set("page", String(params.page))
+
+  return sp.toString()
+}
+
 export default function KPIsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [searchTerm, setSearchTerm] = useState("")
   const [filterFramework, setFilterFramework] = useState("Todos")
   const [filterKpiType, setFilterKpiType] = useState("Todos")
@@ -141,13 +171,53 @@ export default function KPIsPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  /**
+   * ✅ Boot:
+   * - monta lista de meses
+   * - restaura filtros da URL (periodo, q, framework, tipo, status, page)
+   * - garante mês válido
+   */
   useEffect(() => {
     const opts = buildMonthOptions(2025)
     setMonthOptions(opts)
 
+    const urlPeriodo = safeText(searchParams.get("periodo") || searchParams.get("period"))
+    const urlQ = safeText(searchParams.get("q"))
+    const urlFramework = safeText(searchParams.get("framework")) || "Todos"
+    const urlTipo = safeText(searchParams.get("tipo")) || "Todos"
+    const urlStatus = safeText(searchParams.get("status")) || "Todos"
+    const urlPage = clampPage(Number(searchParams.get("page") || 1))
+
+    if (urlQ) setSearchTerm(urlQ)
+    if (urlFramework) setFilterFramework(urlFramework)
+    if (urlTipo) setFilterKpiType(urlTipo)
+    if (urlStatus) setFilterStatus(urlStatus)
+    setPage(urlPage)
+
     const cur = getCurrentMonthISO()
-    setSelectedMonth(opts.includes(cur) ? cur : (opts[0] || cur))
+    const fallbackMonth = opts.includes(cur) ? cur : (opts[0] || cur)
+    const resolvedMonth = urlPeriodo && opts.includes(urlPeriodo) ? urlPeriodo : fallbackMonth
+    setSelectedMonth(resolvedMonth)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /**
+   * ✅ Mantém filtros na URL (sem sujar histórico)
+   */
+  useEffect(() => {
+    if (!selectedMonth) return
+
+    const qs = buildKpisQuery({
+      periodo: selectedMonth,
+      q: searchTerm || undefined,
+      framework: filterFramework || "Todos",
+      tipo: filterKpiType || "Todos",
+      status: filterStatus || "Todos",
+      page,
+    })
+
+    router.replace(qs ? `/kpis?${qs}` : "/kpis")
+  }, [selectedMonth, searchTerm, filterFramework, filterKpiType, filterStatus, page, router])
 
   useEffect(() => {
     async function load() {
@@ -160,24 +230,24 @@ export default function KPIsPage() {
         const result = await fetchKPIs({
           month: selectedMonth,
           page: 1,
-          pageSize: 5000
+          pageSize: 5000,
         })
 
         if (!result?.success) {
-          setLoadError(result?.error || "Falha ao carregar KPIs do banco.")
+          setLoadError((result as any)?.error || "Falha ao carregar KPIs do banco.")
           setKpisData([])
           setLoading(false)
           return
         }
 
-        const rows = Array.isArray(result.data) ? result.data : []
+        const rows = Array.isArray((result as any).data) ? (result as any).data : []
 
         const uuids = rows
           .map((r: any) => String(r.kpi_uuid || "").trim())
           .filter(Boolean)
 
         const runsRes = await fetchLatestKpiRunsForPeriod(uuids, selectedMonth)
-        const runMap = runsRes?.success && runsRes.data ? runsRes.data : {}
+        const runMap = runsRes?.success && (runsRes as any).data ? (runsRes as any).data : {}
 
         const mapped: KPIRecord[] = rows.map((r: any) => {
           const id = String(r.kpi_id || r.id || "").trim()
@@ -206,7 +276,7 @@ export default function KPIsPage() {
             meta: toPercentLabel(meta),
             atual,
             status: uiStatus.label,
-            corStatus: uiStatus.dot
+            corStatus: uiStatus.dot,
           }
         })
 
@@ -223,34 +293,35 @@ export default function KPIsPage() {
   }, [selectedMonth])
 
   const frameworkOptions = useMemo(() => {
-    const fromData = Array.from(new Set(kpisData.map(k => k.framework).filter(Boolean)))
+    const fromData = Array.from(new Set(kpisData.map((k) => safeText(k.framework)).filter(Boolean)))
     const fixed = ["SOX", "ISO 27001", "SOC2", "NIST"]
-    return Array.from(new Set([...fixed, ...fromData]))
+    return Array.from(new Set([...fixed, ...fromData])).sort((a, b) => a.localeCompare(b))
   }, [kpisData])
 
   const typeOptions = useMemo(() => {
-    const fromData = Array.from(new Set(kpisData.map(k => k.kpi_type).filter(Boolean)))
+    const fromData = Array.from(new Set(kpisData.map((k) => safeText(k.kpi_type)).filter(Boolean)))
     const fixed = ["Manual", "Automated"]
-    return Array.from(new Set([...fixed, ...fromData]))
+    return Array.from(new Set([...fixed, ...fromData])).sort((a, b) => a.localeCompare(b))
   }, [kpisData])
 
+  /**
+   * ✅ Filtros garantidos:
+   * - Busca: nome OU id
+   * - Framework/Tipo: match exato (dropdown)
+   * - Status: match exato (dropdown; usa labels da UI)
+   */
   const filteredKPIs = useMemo(() => {
-    const s = searchTerm.toLowerCase()
+    const s = searchTerm.trim().toLowerCase()
 
-    return kpisData.filter(kpi => {
+    return kpisData.filter((kpi) => {
       const matchSearch =
-        (kpi.nome || "").toLowerCase().includes(s) ||
-        (kpi.id || "").toLowerCase().includes(s)
+        !s ||
+        safeText(kpi.nome).toLowerCase().includes(s) ||
+        safeText(kpi.id).toLowerCase().includes(s)
 
-      const matchFramework = filterFramework === "Todos" || kpi.framework === filterFramework
-      const matchType = filterKpiType === "Todos" || kpi.kpi_type === filterKpiType
-
-      const matchStatus =
-        filterStatus === "Todos" ||
-        (filterStatus === "Meta Atingida" && kpi.status === "Meta Atingida") ||
-        (filterStatus === "Em Atenção" && kpi.status === "Em Atenção") ||
-        (filterStatus === "Crítico" && kpi.status === "Crítico") ||
-        (filterStatus === "PEND." && kpi.status === "PEND.")
+      const matchFramework = filterFramework === "Todos" || safeText(kpi.framework) === safeText(filterFramework)
+      const matchType = filterKpiType === "Todos" || safeText(kpi.kpi_type) === safeText(filterKpiType)
+      const matchStatus = filterStatus === "Todos" || safeText(kpi.status) === safeText(filterStatus)
 
       return matchSearch && matchFramework && matchType && matchStatus
     })
@@ -261,9 +332,10 @@ export default function KPIsPage() {
   const canNext = page < totalPages
 
   const paginatedKPIs = useMemo(() => {
-    const start = (page - 1) * pageSize
+    const safePage = Math.min(Math.max(1, page), totalPages)
+    const start = (safePage - 1) * pageSize
     return filteredKPIs.slice(start, start + pageSize)
-  }, [filteredKPIs, page])
+  }, [filteredKPIs, page, totalPages])
 
   useEffect(() => {
     setPage(1)
@@ -271,8 +343,8 @@ export default function KPIsPage() {
 
   const stats = useMemo(() => {
     const total = filteredKPIs.length
-    const atingidas = filteredKPIs.filter(k => k.status === "Meta Atingida").length
-    const abaixo = filteredKPIs.filter(k => k.status !== "Meta Atingida").length
+    const atingidas = filteredKPIs.filter((k) => k.status === "Meta Atingida").length
+    const abaixo = filteredKPIs.filter((k) => k.status !== "Meta Atingida").length
     const perc = total > 0 ? Math.round((atingidas / total) * 100) : 0
 
     const perf = filteredKPIs.reduce((acc, k) => {
@@ -287,12 +359,26 @@ export default function KPIsPage() {
     return { perc, perfLabel, abaixo }
   }, [filteredKPIs])
 
+  // ✅ query atual para propagar no "Analisar"
+  const currentQuery = useMemo(() => {
+    return buildKpisQuery({
+      periodo: selectedMonth,
+      q: searchTerm || undefined,
+      framework: filterFramework,
+      tipo: filterKpiType,
+      status: filterStatus,
+      page,
+    })
+  }, [selectedMonth, searchTerm, filterFramework, filterKpiType, filterStatus, page])
+
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Indicadores de Performance (KPIs)</h1>
-          <p className="text-slate-500 mt-1 font-medium text-sm">Monitore as métricas de conformidade e performance em tempo real.</p>
+          <p className="text-slate-500 mt-1 font-medium text-sm">
+            Monitore as métricas de conformidade e performance em tempo real.
+          </p>
         </div>
         <button className="bg-[#f71866] hover:bg-[#d61556] text-white px-6 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#f71866]/20 transition-all active:scale-95">
           <Plus className="h-5 w-5" />
@@ -328,8 +414,8 @@ export default function KPIsPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#f71866]/20 focus:border-[#f71866] outline-none transition-all"
-              placeholder="Buscar KPI..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#f71866]/20 focus:border-[#f71866] outline-none transition-all text-sm"
+              placeholder="Buscar por Código ou Nome..."
             />
           </div>
 
@@ -340,7 +426,9 @@ export default function KPIsPage() {
           >
             <option value="Todos">Framework (Todos)</option>
             {frameworkOptions.map((fw) => (
-              <option key={fw} value={fw}>{fw}</option>
+              <option key={fw} value={fw}>
+                {fw}
+              </option>
             ))}
           </select>
 
@@ -351,7 +439,9 @@ export default function KPIsPage() {
           >
             <option value="Todos">Categoria (Todos)</option>
             {typeOptions.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
 
@@ -374,8 +464,11 @@ export default function KPIsPage() {
               setFilterKpiType("Todos")
               setFilterStatus("Todos")
 
-              // ✅ volta para o mês atual (sempre existe na lista gerada)
-              setSelectedMonth(getCurrentMonthISO())
+              const cur = getCurrentMonthISO()
+              const nextMonth = monthOptions.includes(cur) ? cur : (monthOptions[0] || cur)
+              setSelectedMonth(nextMonth)
+
+              setPage(1)
             }}
             className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em] hover:text-slate-600 transition-colors py-2"
           >
@@ -457,9 +550,7 @@ export default function KPIsPage() {
                       </td>
 
                       <td className="px-6 py-4 text-center font-bold text-sm">
-                        <span className={st.text}>
-                          {item.atual}
-                        </span>
+                        <span className={st.text}>{item.atual}</span>
                       </td>
 
                       <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -472,7 +563,11 @@ export default function KPIsPage() {
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center">
                           <button
-                            onClick={() => router.push(`/kpis/${encodeURIComponent(item.id)}`)}
+                            onClick={() =>
+                              router.push(
+                                `/kpis/${encodeURIComponent(item.id)}${currentQuery ? `?${currentQuery}` : ""}`
+                              )
+                            }
                             className="px-4 py-1.5 text-[10px] font-bold text-[#f71866] border border-[#f71866]/20 hover:bg-[#f71866]/5 rounded transition-all uppercase tracking-widest"
                           >
                             Analisar
@@ -495,7 +590,7 @@ export default function KPIsPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => canPrev && setPage(p => p - 1)}
+              onClick={() => canPrev && setPage((p) => p - 1)}
               disabled={!canPrev || loading}
               className={`p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-white transition-all ${
                 !canPrev || loading ? "opacity-50 cursor-not-allowed" : ""
@@ -504,12 +599,12 @@ export default function KPIsPage() {
               <ChevronLeft className="h-4 w-4" />
             </button>
 
-            <button className="w-8 h-8 rounded-lg bg-[#f71866] text-white text-xs font-bold shadow-sm">
-              {page}
-            </button>
+            <div className="text-[11px] font-bold text-slate-400 px-2">
+              {Math.min(page, totalPages)} / {totalPages}
+            </div>
 
             <button
-              onClick={() => canNext && setPage(p => p + 1)}
+              onClick={() => canNext && setPage((p) => p + 1)}
               disabled={!canNext || loading}
               className={`p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-white transition-all ${
                 !canNext || loading ? "opacity-50 cursor-not-allowed" : ""

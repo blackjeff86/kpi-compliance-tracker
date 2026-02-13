@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Search,
   Plus,
@@ -84,8 +84,35 @@ function buildMonthOptions(startYear = 2025, endYear?: number) {
   return out
 }
 
+function clampPage(n: number) {
+  const x = Number(n)
+  if (!Number.isFinite(x) || x < 1) return 1
+  return Math.floor(x)
+}
+
+function buildControlsQuery(params: {
+  periodo?: string
+  q?: string
+  risco?: string
+  owner?: string
+  focal?: string
+  page?: number
+}) {
+  const sp = new URLSearchParams()
+
+  if (params.periodo) sp.set("periodo", params.periodo)
+  if (params.q) sp.set("q", params.q)
+  if (params.risco && params.risco !== "Todos") sp.set("risco", params.risco)
+  if (params.owner && params.owner !== "Todos") sp.set("owner", params.owner)
+  if (params.focal && params.focal !== "Todos") sp.set("focal", params.focal)
+  if (params.page && params.page !== 1) sp.set("page", String(params.page))
+
+  return sp.toString()
+}
+
 export default function ControlesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const ITEMS_PER_PAGE = 15
 
   const [controles, setControles] = useState<Controle[]>([])
@@ -104,13 +131,56 @@ export default function ControlesPage() {
 
   const [isNewControlModalOpen, setIsNewControlModalOpen] = useState(false)
 
+  /**
+   * ✅ Boot:
+   * - monta lista de meses
+   * - restaura filtros da URL (periodo, q, risco, owner, focal, page)
+   * - garante mês válido
+   */
   useEffect(() => {
     const opts = buildMonthOptions(2025)
     setMonthOptions(opts)
 
+    const urlPeriodo = safeText(searchParams.get("periodo") || searchParams.get("period"))
+    const urlQ = safeText(searchParams.get("q"))
+    const urlRisco = safeText(searchParams.get("risco")) || "Todos"
+    const urlOwner = safeText(searchParams.get("owner")) || "Todos"
+    const urlFocal = safeText(searchParams.get("focal")) || "Todos"
+    const urlPage = clampPage(Number(searchParams.get("page") || 1))
+
+    if (urlQ) setSearchTerm(urlQ)
+    if (urlRisco) setSelectedRisco(urlRisco)
+    if (urlOwner) setSelectedOwner(urlOwner)
+    if (urlFocal) setSelectedFocal(urlFocal)
+    setCurrentPage(urlPage)
+
     const cur = getCurrentMonthISO()
-    setSelectedMonth(opts.includes(cur) ? cur : (opts[0] || cur))
+    const fallbackMonth = opts.includes(cur) ? cur : (opts[0] || cur)
+
+    // se veio periodo na URL e ele existe na lista, usa ele; senão usa fallback
+    const resolvedMonth = urlPeriodo && opts.includes(urlPeriodo) ? urlPeriodo : fallbackMonth
+    setSelectedMonth(resolvedMonth)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /**
+   * ✅ Mantém filtros na URL
+   * (router.replace não “sujará” o histórico e o back funciona do jeito esperado)
+   */
+  useEffect(() => {
+    if (!selectedMonth) return
+
+    const qs = buildControlsQuery({
+      periodo: selectedMonth,
+      q: searchTerm || undefined,
+      risco: selectedRisco || "Todos",
+      owner: selectedOwner || "Todos",
+      focal: selectedFocal || "Todos",
+      page: currentPage,
+    })
+
+    router.replace(qs ? `/controles?${qs}` : "/controles")
+  }, [selectedMonth, searchTerm, selectedRisco, selectedOwner, selectedFocal, currentPage, router])
 
   useEffect(() => {
     async function loadData() {
@@ -120,13 +190,16 @@ export default function ControlesPage() {
         setLoading(true)
         const result = await fetchControles({ period: selectedMonth })
 
-        if (result.success && result.data) {
-          const mappedData: Controle[] = result.data.map((item: any) => {
+        if (result.success && (result as any).data) {
+          const mappedData: Controle[] = (result as any).data.map((item: any) => {
             return {
               id: item.id_control || item.id,
               nome: item.name_control || item.name || "Sem nome",
               framework: item.framework || "N/A",
+
+              // ⚠️ risco: mantém como texto vindo do banco (risk_title)
               risco: item.risk_title || item.risco || "Medium",
+
               control_owner: item.owner_name || item.control_owner || item.owner || "Não atribuído",
               focal_point_name: item.focal_point_name || item.focal || "Não atribuído",
 
@@ -167,34 +240,60 @@ export default function ControlesPage() {
     })
   }, [controles])
 
+  /**
+   * ✅ Filtros garantidos:
+   * - Busca: id, nome, owner, focal, framework, risco
+   * - Risco: compara por "contém"
+   * - Owner/Focal: match exato
+   */
   const filteredData = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+
     return processedData.filter((item) => {
-      const searchLower = searchTerm.toLowerCase()
-      const matchSearch = (item.nome + item.id + item.control_owner + item.focal_point_name).toLowerCase().includes(searchLower)
-      const matchRisco = selectedRisco === "Todos" || item.risco === selectedRisco
-      const matchOwner = selectedOwner === "Todos" || item.control_owner === selectedOwner
-      const matchFocal = selectedFocal === "Todos" || item.focal_point_name === selectedFocal
+      const haystack = [
+        item.id,
+        item.nome,
+        item.framework,
+        item.risco,
+        item.control_owner,
+        item.focal_point_name,
+      ]
+        .map((x) => safeText(x).toLowerCase())
+        .join(" ")
+
+      const matchSearch = !q || haystack.includes(q)
+
+      const riscoFilter = safeText(selectedRisco)
+      const matchRisco =
+        riscoFilter === "Todos" ||
+        safeText(item.risco).toLowerCase().includes(riscoFilter.toLowerCase())
+
+      const matchOwner = selectedOwner === "Todos" || safeText(item.control_owner) === safeText(selectedOwner)
+      const matchFocal = selectedFocal === "Todos" || safeText(item.focal_point_name) === safeText(selectedFocal)
+
       return matchSearch && matchRisco && matchOwner && matchFocal
     })
   }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, processedData])
 
   const ownersList = useMemo(() => {
-    return Array.from(new Set(controles.map((c) => c.control_owner)))
+    return Array.from(new Set(controles.map((c) => safeText(c.control_owner))))
       .filter((o) => o && o !== "Não atribuído")
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
   }, [controles])
 
   const focalsList = useMemo(() => {
-    return Array.from(new Set(controles.map((c) => c.focal_point_name)))
+    return Array.from(new Set(controles.map((c) => safeText(c.focal_point_name))))
       .filter((f) => f && f !== "Não atribuído")
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
   }, [controles])
 
-  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE)
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE))
+
   const paginatedControles = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    const safePage = Math.min(Math.max(1, currentPage), totalPages)
+    const start = (safePage - 1) * ITEMS_PER_PAGE
     return filteredData.slice(start, start + ITEMS_PER_PAGE)
-  }, [filteredData, currentPage])
+  }, [filteredData, currentPage, totalPages])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -224,6 +323,18 @@ export default function ControlesPage() {
     if (up.includes("ATEN")) return <AlertTriangle size={12} className="text-amber-500" />
     return <Clock size={12} className="text-amber-500" />
   }
+
+  // ✅ query atual para propagar no "Detalhes" (isso é o que vai permitir o breadcrumb manter filtros)
+  const currentQuery = useMemo(() => {
+    return buildControlsQuery({
+      periodo: selectedMonth,
+      q: searchTerm || undefined,
+      risco: selectedRisco,
+      owner: selectedOwner,
+      focal: selectedFocal,
+      page: currentPage,
+    })
+  }, [selectedMonth, searchTerm, selectedRisco, selectedOwner, selectedFocal, currentPage])
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
@@ -271,7 +382,7 @@ export default function ControlesPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm outline-none transition-all"
-              placeholder="Buscar por ID, Nome ou Owner..."
+              placeholder="Buscar por ID, Nome, Risco, Framework, Owner, Focal..."
             />
           </div>
 
@@ -320,8 +431,11 @@ export default function ControlesPage() {
               setSelectedOwner("Todos")
               setSelectedFocal("Todos")
 
-              // ✅ volta para o mês atual (sempre existe na lista gerada)
-              setSelectedMonth(getCurrentMonthISO())
+              const cur = getCurrentMonthISO()
+              const nextMonth = monthOptions.includes(cur) ? cur : (monthOptions[0] || cur)
+              setSelectedMonth(nextMonth)
+
+              setCurrentPage(1)
             }}
             className="text-[11px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors py-2 text-center"
           >
@@ -335,6 +449,11 @@ export default function ControlesPage() {
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-3">
             <Loader2 className="animate-spin text-[#f71866]" size={32} />
             <p className="text-sm font-medium">Carregando dados dos proprietários...</p>
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-3 p-10">
+            <AlertTriangle className="text-amber-500" size={28} />
+            <p className="text-sm font-medium">Falha ao carregar controles para o período selecionado.</p>
           </div>
         ) : (
           <>
@@ -376,12 +495,14 @@ export default function ControlesPage() {
                               {item.id}
                             </span>
                           </td>
+
                           <td className="px-6 py-4">
                             <div className="text-sm font-bold text-slate-700">{item.nome}</div>
                             <div className="text-[11px] text-slate-400 font-medium uppercase mt-0.5">
                               {item.framework}
                             </div>
                           </td>
+
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[#f71866]">
@@ -390,6 +511,7 @@ export default function ControlesPage() {
                               <span className="text-xs font-bold text-slate-600">{item.control_owner}</span>
                             </div>
                           </td>
+
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[#f71866]">
@@ -403,9 +525,7 @@ export default function ControlesPage() {
                             <div className="flex flex-col items-center justify-center">
                               <div className="flex items-center justify-center gap-1.5">
                                 {pickStatusIcon(item.status_final)}
-                                <span className={`text-[11px] font-bold ${st.text}`}>
-                                  {item.status_final}
-                                </span>
+                                <span className={`text-[11px] font-bold ${st.text}`}>{item.status_final}</span>
                               </div>
 
                               <div className="mt-1 flex items-center gap-2 text-[10px] font-bold text-slate-400">
@@ -432,18 +552,16 @@ export default function ControlesPage() {
                           </td>
 
                           <td className="px-6 py-4 text-center">
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getRiskStyles(
-                                item.risco
-                              )}`}
-                            >
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getRiskStyles(item.risco)}`}>
                               {item.risco}
                             </span>
                           </td>
+
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-center gap-4">
+                              {/* ✅ AQUI É O PONTO: leva a query completa para o detalhe */}
                               <Link
-                                href={`/controles/${encodeURIComponent(item.id)}?periodo=${encodeURIComponent(selectedMonth)}`}
+                                href={`/controles/${encodeURIComponent(item.id)}${currentQuery ? `?${currentQuery}` : ""}`}
                                 className="text-[10px] font-bold text-slate-400 hover:text-[#f71866] uppercase transition-colors"
                               >
                                 Detalhes
@@ -477,6 +595,11 @@ export default function ControlesPage() {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
+
+                <div className="text-[11px] font-bold text-slate-400 px-2">
+                  {Math.min(currentPage, totalPages)} / {totalPages}
+                </div>
+
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages || totalPages === 0}

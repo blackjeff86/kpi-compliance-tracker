@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import {
   ChevronRight,
   Settings,
@@ -78,7 +78,15 @@ function isTrueLike(v: any) {
 
 export default function KpiDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
+
   const kpiRef = decodeURIComponent(String((params as any)?.id || ""))
+
+  // ✅ mantém contexto ao voltar pelo link interno
+  const backHref = useMemo(() => {
+    const qs = searchParams?.toString() || ""
+    return qs ? `/kpis?${qs}` : "/kpis"
+  }, [searchParams])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -231,7 +239,7 @@ export default function KpiDetailPage() {
           <div className="text-sm font-bold text-red-600">KPI não encontrado</div>
           <div className="text-xs text-slate-500 mt-2">{errorMsg || "Tente voltar e selecionar outro KPI."}</div>
           <div className="mt-4">
-            <Link href="/kpis" className="btn-vtex inline-flex items-center gap-2">
+            <Link href={backHref} className="btn-vtex inline-flex items-center gap-2">
               Voltar
             </Link>
           </div>
@@ -246,7 +254,7 @@ export default function KpiDetailPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
         <div className="flex flex-col">
           <nav className="flex items-center space-x-2 text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
-            <Link href="/kpis" className="hover:text-[#f71963] transition-colors">
+            <Link href={backHref} className="hover:text-[#f71963] transition-colors">
               KPIs
             </Link>
             <ChevronRight className="h-3 w-3" />
@@ -270,7 +278,9 @@ export default function KpiDetailPage() {
             </span>
           </div>
 
-          <p className="text-slate-500 mt-2 font-medium text-sm">Detalhamento do KPI e configuração da meta/regra de pontuação.</p>
+          <p className="text-slate-500 mt-2 font-medium text-sm">
+            Detalhamento do KPI e configuração da meta/regra de pontuação.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -315,7 +325,9 @@ export default function KpiDetailPage() {
               <InfoRow icon={<ShieldCheck size={14} />} label="Meta (Target)" value={detail.kpi_target ?? "0"} />
 
               <div className="mt-5 rounded-xl bg-slate-50 border border-slate-100 p-4">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Regra ativa (preview)</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  Regra ativa (preview)
+                </div>
                 <div className="text-xs text-slate-700 font-bold">{preview.title}</div>
                 <div className="text-xs text-slate-600 mt-2 space-y-1">
                   <div>🟢 {preview.green}</div>
@@ -334,7 +346,10 @@ export default function KpiDetailPage() {
                 icon={<Hash size={14} />}
                 label="Controle (id_control)"
                 value={
-                  <Link href={`/controles/${encodeURIComponent(detail.id_control)}`} className="text-[#f71963] font-bold hover:underline">
+                  <Link
+                    href={`/controles/${encodeURIComponent(detail.id_control)}`}
+                    className="text-[#f71963] font-bold hover:underline"
+                  >
                     {detail.id_control}
                   </Link>
                 }
@@ -478,7 +493,11 @@ export default function KpiDetailPage() {
                 Cancelar
               </button>
 
-              <button onClick={onSave} disabled={saving} className={`btn-vtex flex items-center gap-2 ${saving ? "opacity-70 cursor-not-allowed" : ""}`}>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className={`btn-vtex flex items-center gap-2 ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
+              >
                 {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
                 Salvar
               </button>
@@ -507,7 +526,9 @@ function InfoRow({ icon, label, value }: any) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="flex items-center gap-2 text-slate-500">
-        <span className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[#f71963]">{icon}</span>
+        <span className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[#f71963]">
+          {icon}
+        </span>
         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</div>
       </div>
       <div className="text-sm font-bold text-slate-700 text-right max-w-[60%] break-words">{value}</div>

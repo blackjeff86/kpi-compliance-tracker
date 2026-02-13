@@ -1,6 +1,8 @@
+// controles/[id]/page.tsx
+
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import {
@@ -130,8 +132,41 @@ export default function DetalheControlePage() {
 
   const id = params.id as string
 
+  /**
+   * ✅ FIX (estável): congela a query ORIGINAL vinda da listagem.
+   * Usamos window.location.search no mount para evitar a intermitência do useSearchParams na hidratação.
+   */
+  const backQueryRef = useRef<string>("")
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    const qsFromWindow = typeof window !== "undefined" ? window.location.search.replace(/^\?/, "") : ""
+    if (!backQueryRef.current && qsFromWindow) backQueryRef.current = qsFromWindow
+
+    const qsFromHook = searchParams?.toString() || ""
+    if (!backQueryRef.current && qsFromHook) backQueryRef.current = qsFromHook
+
+    setIsReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const periodoFromUrl = safeText(searchParams.get("periodo") || searchParams.get("period"))
   const [periodoISO, setPeriodoISO] = useState<string>(periodoFromUrl || getDefaultPeriodoISO())
+
+  // ✅ helper: sempre monta query base preservando tudo e atualizando apenas o periodo
+  const buildQueryWithPeriodo = (periodo: string) => {
+    const base = backQueryRef.current || (typeof window !== "undefined" ? window.location.search.replace(/^\?/, "") : "") || searchParams?.toString() || ""
+    const qp = new URLSearchParams(base ? Array.from(new URLSearchParams(base).entries()) : [])
+    qp.set("periodo", periodo)
+    return qp.toString()
+  }
+
+  // ✅ Link "Controles" SEMPRE com a mesma query (preserva q/risco/owner/focal/page...)
+  const backHref = useMemo(() => {
+    const qs = buildQueryWithPeriodo(periodoISO)
+    return qs ? `/controles?${qs}` : "/controles"
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodoISO, searchParams])
 
   const [activeTab, setActiveTab] = useState<TabKey>("kpis")
   const [data, setData] = useState<any>(null)
@@ -162,13 +197,18 @@ export default function DetalheControlePage() {
     if (id) loadData()
   }, [id, periodoISO])
 
+  /**
+   * ✅ FIX: quando mudar o mês, atualiza a URL do detalhe preservando toda a query original
+   * e NÃO deixa rodar antes de "congelar" a query (isReady).
+   */
   useEffect(() => {
     if (!id) return
-    const qp = new URLSearchParams(Array.from(searchParams.entries()))
-    qp.set("periodo", periodoISO)
-    router.replace(`/controles/${encodeURIComponent(id)}?${qp.toString()}`)
+    if (!isReady) return
+
+    const qs = buildQueryWithPeriodo(periodoISO)
+    router.replace(`/controles/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodoISO, id])
+  }, [periodoISO, id, isReady])
 
   const infoGeral = data
 
@@ -224,13 +264,14 @@ export default function DetalheControlePage() {
   }, [kpisList, periodoISO])
 
   const onEditarDetalhesTecnicos = () => {
-    router.push(`/controles/editar/${encodeURIComponent(id)}?periodo=${encodeURIComponent(periodoISO)}`)
+    const qs = buildQueryWithPeriodo(periodoISO)
+    router.push(`/controles/editar/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`)
   }
 
   const irParaExecucao = (kpiUuid: string) => {
-    const qp = new URLSearchParams()
+    const qs = buildQueryWithPeriodo(periodoISO)
+    const qp = new URLSearchParams(qs)
     qp.set("kpi", kpiUuid)
-    qp.set("periodo", periodoISO)
     router.push(`/controles/execucao/${encodeURIComponent(id)}?${qp.toString()}`)
   }
 
@@ -322,7 +363,7 @@ export default function DetalheControlePage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
         <div className="flex flex-col">
           <nav className="flex items-center space-x-2 text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">
-            <Link href={`/controles?periodo=${encodeURIComponent(periodoISO)}`} className="hover:text-[#f71866] transition-colors">
+            <Link href={backHref} className="hover:text-[#f71866] transition-colors">
               Controles
             </Link>
             <ChevronRight className="h-3 w-3" />
@@ -408,8 +449,6 @@ export default function DetalheControlePage() {
                         kpi.kpi_uuid && kpiRunStatusByUuid[kpi.kpi_uuid] ? kpiRunStatusByUuid[kpi.kpi_uuid] : ""
 
                       const hasRun = !!safeText(runStatusRaw)
-
-                      // ✅ mostra status do banco (GREEN/YELLOW/RED) quando existir
                       const valueToShow = hasRun ? safeText(runStatusRaw) : "PEND."
                       const metaToShow = `Meta: ${safeText(kpi.target) || "0"}`
 
