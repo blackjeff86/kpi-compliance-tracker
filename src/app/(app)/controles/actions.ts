@@ -32,7 +32,8 @@ function normalizeKpiStatus(v: any): "GREEN" | "YELLOW" | "RED" | null {
   if (up === "GREEN" || up === "YELLOW" || up === "RED") return up as any
 
   // legados / pt-br (caso algum lugar mande texto humano)
-  if (up.includes("META ATINGIDA") || up.includes("ATINGIDA") || up.includes("OK") || up.includes("CONFORME")) return "GREEN"
+  if (up.includes("META ATINGIDA") || up.includes("ATINGIDA") || up.includes("OK") || up.includes("CONFORME"))
+    return "GREEN"
   if (up.includes("CRIT") || up.includes("CRÍT") || up.includes("RED")) return "RED"
   if (up.includes("ATEN") || up.includes("PEND") || up.includes("YELLOW")) return "YELLOW"
 
@@ -41,11 +42,159 @@ function normalizeKpiStatus(v: any): "GREEN" | "YELLOW" | "RED" | null {
 }
 
 /**
+ * ✅ Normaliza uma string de frequência para valores canônicos esperados:
+ * DAILY | WEEKLY | MONTHLY | QUARTERLY | SEMI_ANNUAL | ANNUAL | ON_DEMAND
+ */
+function normalizeFrequencyValue(v: any) {
+  const raw = safeText(v)
+  if (!raw) return null
+
+  // ✅ FIX: remove acentos antes de normalizar (evita DIÁRIO virar caso não reconhecido)
+  const stripAccents = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+
+  // base para comparação (sem acento)
+  const up = stripAccents(raw.toString().trim().toUpperCase())
+
+  const key = up
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "_")
+    .replace(/__+/g, "_")
+
+  // ✅ DAILY / DIÁRIO
+  // cobre: DIARIO, DIARIA, DIARIAMENTE, TODO_DIA, TODOS_OS_DIAS, D+1, D1, DAILY, DAY
+  if (
+    key === "DAILY" ||
+    key === "DAY" ||
+    key.includes("DAILY") ||
+    key.includes("DIAR") ||
+    key.includes("DIARIA") ||
+    key.includes("DIARIAMENTE") ||
+    key.includes("TODO_DIA") ||
+    key.includes("TODOS_OS_DIAS") ||
+    key === "D1" ||
+    key === "D+1" ||
+    key.includes("D+1")
+  )
+    return "DAILY"
+
+  // ✅ WEEKLY / SEMANAL
+  if (key === "WEEKLY" || key.includes("WEEK") || key.includes("SEMAN")) return "WEEKLY"
+
+  // ✅ MONTHLY / MENSAL
+  if (key === "MONTHLY" || key.includes("MONTH") || key.includes("MENSAL")) return "MONTHLY"
+
+  // ✅ QUARTERLY / TRIMESTRAL
+  if (key === "QUARTERLY" || key === "QUARTER" || key.includes("QUART") || key.includes("TRIMEST"))
+    return "QUARTERLY"
+
+  // ✅ SEMI_ANNUAL / SEMESTRAL
+  if (
+    key === "SEMI_ANNUAL" ||
+    key === "SEMIANNUAL" ||
+    key === "SEMI-ANNUAL" ||
+    key === "SEMI" ||
+    key.includes("SEMI_ANNUAL") ||
+    key.includes("SEMIANNUAL") ||
+    key.includes("SEMIANNU") ||
+    key.includes("SEMEST") ||
+    key.includes("SEMESTRAL") ||
+    key.includes("SEMESTRE") ||
+    key.includes("SEMESTRALMENTE")
+  )
+    return "SEMI_ANNUAL"
+
+  // ✅ ANNUAL / ANUAL (sem confundir com SEMI_ANNUAL)
+  if (
+    (key === "ANNUAL" ||
+      key === "YEARLY" ||
+      key === "YEAR" ||
+      key.includes("ANNUAL") ||
+      key.includes("ANUAL") ||
+      key.includes("YEAR")) &&
+    !key.startsWith("SEMI") &&
+    !key.includes("SEMI_ANNUAL") &&
+    !key.includes("SEMIANNUAL") &&
+    !key.includes("SEMEST")
+  )
+    return "ANNUAL"
+
+  // ✅ ON_DEMAND / ADHOC / SOB DEMANDA
+  if (
+    key === "ON_DEMAND" ||
+    key.includes("ON_DEMAND") ||
+    key.includes("ONDEMAND") ||
+    key.includes("ON_DEM") ||
+    key.includes("SOB_DEMANDA") ||
+    key.includes("SOBDEMANDA") ||
+    key.includes("AD_HOC") ||
+    key.includes("ADHOC")
+  )
+    return "ON_DEMAND"
+
+  // fallback: mantém como veio
+  return raw
+}
+
+/**
+ * ✅ Resolve frequência a partir de múltiplas colunas possíveis do CSV/objeto.
+ * Se houver conflito (ex.: frequency=ON_DEMAND mas outro campo=DAILY),
+ * escolhe a MAIS PRIORITÁRIA.
+ */
+function resolveFrequencyFromRow(c: any) {
+  const candidates = [
+    c.frequency,
+    c.frequencia,
+    c.control_frequency,
+    c.controlFrequency,
+    c.frequency_name,
+    c.frequencyName,
+    c.frequency_title,
+    c.frequencyTitle,
+
+    // extras comuns em CSVs
+    c.periodicity,
+    c.periodicidade,
+    c.cadence,
+    c.cadencia,
+    c.schedule,
+    c.agenda,
+  ]
+    .map(normalizeFrequencyValue)
+    .filter((x) => !!x) as string[]
+
+  if (candidates.length === 0) return null
+
+  // prioridade: se existir DAILY em qualquer lugar, ele vence
+  const priority: Record<string, number> = {
+    DAILY: 1,
+    WEEKLY: 2,
+    MONTHLY: 3,
+    QUARTERLY: 4,
+    SEMI_ANNUAL: 5,
+    ANNUAL: 6,
+    ON_DEMAND: 99,
+  }
+
+  candidates.sort((a, b) => (priority[a] ?? 50) - (priority[b] ?? 50))
+
+  return candidates[0]
+}
+
+/**
  * ✅ Lista controles (1 por id_control)
  * ✅ Agora já traz:
  * - exec_done / exec_total
  * - green/yellow/red counts
- * - status_final (EM ABERTO | CONFORME | EM ATENÇÃO | NÃO CONFORME)
+ * - status_final (EM ABERTO | CONFORME | EM ATENÇÃO | NÃO CONFORME | NÃO APLICÁVEL)
+ *
+ * Regras de aplicabilidade por frequência (com base no mês do "period"):
+ * - Mensal: sempre aplicável
+ * - Trimestral: aplicável apenas em: Jan (Q4), Abr (Q1), Jul (Q2), Out (Q3)
+ * - Semestral: aplicável apenas em: Jan (S2), Jul (S1)
+ * - Anual: aplicável em Set-Out-Nov-Dez
  *
  * Obs: period deve ser ISO "YYYY-MM" (ex: "2026-02")
  */
@@ -65,7 +214,11 @@ export async function fetchControles(params?: { period?: string }) {
 
     // ✅ Query: consolida status do controle baseado nos KPIs do mês selecionado
     const data = await sql`
-      WITH kpi_total AS (
+      WITH period_ctx AS (
+        -- ✅ FIX: cast direto para date (mais estável que TO_DATE com parâmetro)
+        SELECT EXTRACT(MONTH FROM ((${period} || '-01')::date))::int AS m
+      ),
+      kpi_total AS (
         SELECT
           ck.id_control,
           COUNT(*)::int AS exec_total
@@ -102,6 +255,54 @@ export async function fetchControles(params?: { period?: string }) {
         COALESCE(a.red_count, 0) AS red_count,
 
         CASE
+          -- ✅ Aplica "NÃO APLICÁVEL" quando o mês do período não é mês de execução para a frequência do controle
+
+          WHEN (
+            -- trimestral
+            (
+              COALESCE(c.frequency, '') ILIKE '%trim%'
+              OR COALESCE(c.frequency, '') ILIKE '%trime%'
+              OR COALESCE(c.frequency, '') ILIKE '%quarter%'
+              OR COALESCE(c.frequency, '') ILIKE '%trimestral%'
+              OR UPPER(TRIM(COALESCE(c.frequency, ''))) = 'QUARTERLY'
+              OR UPPER(TRIM(COALESCE(c.frequency, ''))) = 'QUARTER'
+            )
+            AND (SELECT m FROM period_ctx) NOT IN (1, 4, 7, 10)
+          ) THEN 'NÃO APLICÁVEL'
+
+          WHEN (
+            -- ✅ semestral (robusto: SEMI_ANNUAL / SEMESTRAL / SEMI / SEMEST.. etc)
+            (
+              COALESCE(c.frequency, '') ILIKE '%semest%'
+              OR COALESCE(c.frequency, '') ILIKE '%semestral%'
+              OR COALESCE(c.frequency, '') ILIKE '%semi_annual%'
+              OR COALESCE(c.frequency, '') ILIKE '%semi-annual%'
+              OR COALESCE(c.frequency, '') ILIKE '%semiannual%'
+              OR UPPER(TRIM(COALESCE(c.frequency, ''))) IN ('SEMI_ANNUAL','SEMIANNUAL','SEMI-ANNUAL','SEMI')
+            )
+            AND (SELECT m FROM period_ctx) NOT IN (1, 7)
+          ) THEN 'NÃO APLICÁVEL'
+
+          WHEN (
+            -- ✅ anual (sem confundir com SEMI_ANNUAL)
+            (
+              (
+                COALESCE(c.frequency, '') ILIKE '%anual%'
+                OR COALESCE(c.frequency, '') ILIKE '%annual%'
+                OR COALESCE(c.frequency, '') ILIKE '%year%'
+                OR UPPER(TRIM(COALESCE(c.frequency, ''))) IN ('ANNUAL','YEARLY','YEAR')
+              )
+              AND UPPER(TRIM(COALESCE(c.frequency, ''))) NOT LIKE 'SEMI%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semi_annual%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semiannual%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semi-annual%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semest%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semestral%'
+            )
+            AND (SELECT m FROM period_ctx) NOT IN (9, 10, 11, 12)
+          ) THEN 'NÃO APLICÁVEL'
+
+          -- mensal (ou qualquer outro default): segue regra atual
           WHEN COALESCE(kt.exec_total, 0) = 0 THEN 'EM ABERTO'
           WHEN COALESCE(a.exec_done, 0) < COALESCE(kt.exec_total, 0) THEN 'EM ABERTO'
           WHEN COALESCE(a.red_count, 0) > 0 THEN 'NÃO CONFORME'
@@ -338,7 +539,10 @@ export async function fetchKPIs(params?: {
     return { success: true as const, data, total }
   } catch (error: any) {
     console.error("Erro fetchKPIs:", error)
-    return { success: false as const, error: `Erro ao carregar KPIs do banco. Detalhe: ${error?.message || "erro desconhecido"}` }
+    return {
+      success: false as const,
+      error: `Erro ao carregar KPIs do banco. Detalhe: ${error?.message || "erro desconhecido"}`,
+    }
   }
 }
 
@@ -429,7 +633,10 @@ export async function upsertKpiRun(input: {
     return { success: true as const, data: inserted?.[0] || null }
   } catch (error: any) {
     console.error("Erro upsertKpiRun:", error)
-    return { success: false as const, error: `Erro ao salvar execução do KPI. Detalhe: ${error?.message || "erro desconhecido"}` }
+    return {
+      success: false as const,
+      error: `Erro ao salvar execução do KPI. Detalhe: ${error?.message || "erro desconhecido"}`,
+    }
   }
 }
 
@@ -450,7 +657,11 @@ export async function importarControles(controles: any[]) {
       const id_control = (c.id_control ?? "").toString().trim()
       const kpi_id_raw = c.kpi_id
       const kpi_id = kpi_id_raw === null || kpi_id_raw === undefined ? "" : kpi_id_raw.toString().trim()
-      return { ...c, id_control, kpi_id }
+
+      // ✅ FIX: resolve frequência considerando múltiplos campos e conflitos
+      const frequency = resolveFrequencyFromRow(c)
+
+      return { ...c, id_control, kpi_id, frequency }
     })
 
     const invalidNoKpi = sanitized.filter((r) => r.id_control && !r.kpi_id)
@@ -570,6 +781,9 @@ export async function importarControles(controles: any[]) {
     }
   } catch (error: any) {
     console.error("Erro ao importar controles:", error)
-    return { success: false as const, error: `Falha ao registrar dados. Detalhe: ${error?.message || "erro desconhecido"}` }
+    return {
+      success: false as const,
+      error: `Falha ao registrar dados. Detalhe: ${error?.message || "erro desconhecido"}`,
+    }
   }
 }

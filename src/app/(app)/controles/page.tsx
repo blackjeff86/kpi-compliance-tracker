@@ -35,12 +35,15 @@ interface Controle {
   control_owner: string
   focal_point_name: string
 
+  // ✅ NOVO: frequência do controle
+  frequencia: string
+
   exec_total: number
   exec_done: number
   green_count: number
   yellow_count: number
   red_count: number
-  status_final: "EM ABERTO" | "CONFORME" | "EM ATENÇÃO" | "NÃO CONFORME" | string
+  status_final: "EM ABERTO" | "CONFORME" | "EM ATENÇÃO" | "NÃO CONFORME" | "NÃO APLICÁVEL" | string
 }
 
 /** helpers mês */
@@ -96,6 +99,7 @@ function buildControlsQuery(params: {
   risco?: string
   owner?: string
   focal?: string
+  frequencia?: string
   page?: number
 }) {
   const sp = new URLSearchParams()
@@ -105,6 +109,7 @@ function buildControlsQuery(params: {
   if (params.risco && params.risco !== "Todos") sp.set("risco", params.risco)
   if (params.owner && params.owner !== "Todos") sp.set("owner", params.owner)
   if (params.focal && params.focal !== "Todos") sp.set("focal", params.focal)
+  if (params.frequencia && params.frequencia !== "Todos") sp.set("frequencia", params.frequencia)
   if (params.page && params.page !== 1) sp.set("page", String(params.page))
 
   return sp.toString()
@@ -125,6 +130,9 @@ export default function ControlesPage() {
   const [selectedOwner, setSelectedOwner] = useState("Todos")
   const [selectedFocal, setSelectedFocal] = useState("Todos")
 
+  // ✅ NOVO: filtro de frequência
+  const [selectedFrequencia, setSelectedFrequencia] = useState("Todos")
+
   // ✅ FIXO: anos >= 2025 e meses jan-dez
   const [monthOptions, setMonthOptions] = useState<string[]>([])
   const [selectedMonth, setSelectedMonth] = useState<string>("")
@@ -134,7 +142,7 @@ export default function ControlesPage() {
   /**
    * ✅ Boot:
    * - monta lista de meses
-   * - restaura filtros da URL (periodo, q, risco, owner, focal, page)
+   * - restaura filtros da URL (periodo, q, risco, owner, focal, frequencia, page)
    * - garante mês válido
    */
   useEffect(() => {
@@ -146,12 +154,14 @@ export default function ControlesPage() {
     const urlRisco = safeText(searchParams.get("risco")) || "Todos"
     const urlOwner = safeText(searchParams.get("owner")) || "Todos"
     const urlFocal = safeText(searchParams.get("focal")) || "Todos"
+    const urlFrequencia = safeText(searchParams.get("frequencia")) || "Todos"
     const urlPage = clampPage(Number(searchParams.get("page") || 1))
 
     if (urlQ) setSearchTerm(urlQ)
     if (urlRisco) setSelectedRisco(urlRisco)
     if (urlOwner) setSelectedOwner(urlOwner)
     if (urlFocal) setSelectedFocal(urlFocal)
+    if (urlFrequencia) setSelectedFrequencia(urlFrequencia)
     setCurrentPage(urlPage)
 
     const cur = getCurrentMonthISO()
@@ -176,11 +186,21 @@ export default function ControlesPage() {
       risco: selectedRisco || "Todos",
       owner: selectedOwner || "Todos",
       focal: selectedFocal || "Todos",
+      frequencia: selectedFrequencia || "Todos",
       page: currentPage,
     })
 
     router.replace(qs ? `/controles?${qs}` : "/controles")
-  }, [selectedMonth, searchTerm, selectedRisco, selectedOwner, selectedFocal, currentPage, router])
+  }, [
+    selectedMonth,
+    searchTerm,
+    selectedRisco,
+    selectedOwner,
+    selectedFocal,
+    selectedFrequencia,
+    currentPage,
+    router,
+  ])
 
   useEffect(() => {
     async function loadData() {
@@ -202,6 +222,15 @@ export default function ControlesPage() {
 
               control_owner: item.owner_name || item.control_owner || item.owner || "Não atribuído",
               focal_point_name: item.focal_point_name || item.focal || "Não atribuído",
+
+              // ✅ NOVO: frequência (tenta cobrir nomes comuns de coluna)
+              frequencia:
+                item.control_frequency ||
+                item.frequency ||
+                item.frequencia ||
+                item.frequency_title ||
+                item.frequency_name ||
+                "N/A",
 
               status: item.status || "Pendente",
               pendencia: item.pendencia_kpi || "Pendente",
@@ -242,9 +271,9 @@ export default function ControlesPage() {
 
   /**
    * ✅ Filtros garantidos:
-   * - Busca: id, nome, owner, focal, framework, risco
+   * - Busca: id, nome, owner, focal, framework, risco, frequencia
    * - Risco: compara por "contém"
-   * - Owner/Focal: match exato
+   * - Owner/Focal/Frequencia: match exato
    */
   const filteredData = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
@@ -255,6 +284,7 @@ export default function ControlesPage() {
         item.nome,
         item.framework,
         item.risco,
+        item.frequencia,
         item.control_owner,
         item.focal_point_name,
       ]
@@ -270,10 +300,12 @@ export default function ControlesPage() {
 
       const matchOwner = selectedOwner === "Todos" || safeText(item.control_owner) === safeText(selectedOwner)
       const matchFocal = selectedFocal === "Todos" || safeText(item.focal_point_name) === safeText(selectedFocal)
+      const matchFrequencia =
+        selectedFrequencia === "Todos" || safeText(item.frequencia) === safeText(selectedFrequencia)
 
-      return matchSearch && matchRisco && matchOwner && matchFocal
+      return matchSearch && matchRisco && matchOwner && matchFocal && matchFrequencia
     })
-  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, processedData])
+  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedFrequencia, processedData])
 
   const ownersList = useMemo(() => {
     return Array.from(new Set(controles.map((c) => safeText(c.control_owner))))
@@ -287,6 +319,13 @@ export default function ControlesPage() {
       .sort((a, b) => a.localeCompare(b))
   }, [controles])
 
+  // ✅ NOVO: lista de frequências
+  const frequenciasList = useMemo(() => {
+    return Array.from(new Set(controles.map((c) => safeText(c.frequencia))))
+      .filter((f) => f && f !== "N/A")
+      .sort((a, b) => a.localeCompare(b))
+  }, [controles])
+
   const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE))
 
   const paginatedControles = useMemo(() => {
@@ -297,7 +336,7 @@ export default function ControlesPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedMonth])
+  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedFrequencia, selectedMonth])
 
   const getRiskStyles = (risco: string) => {
     const r = (risco || "").toLowerCase()
@@ -310,6 +349,7 @@ export default function ControlesPage() {
 
   const getFinalStatusStyle = (s: string) => {
     const up = (s || "").toUpperCase()
+    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return { text: "text-slate-400", dot: "bg-slate-300" }
     if (up.includes("CONFORME") && !up.includes("NÃO")) return { text: "text-emerald-600", dot: "bg-emerald-500" }
     if (up.includes("NÃO")) return { text: "text-red-600", dot: "bg-red-500" }
     if (up.includes("ATEN")) return { text: "text-amber-600", dot: "bg-amber-500" }
@@ -318,6 +358,7 @@ export default function ControlesPage() {
 
   const pickStatusIcon = (s: string) => {
     const up = (s || "").toUpperCase()
+    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return <Clock size={12} className="text-slate-300" />
     if (up.includes("CONFORME") && !up.includes("NÃO")) return <CheckCircle2 size={12} className="text-emerald-500" />
     if (up.includes("NÃO")) return <AlertTriangle size={12} className="text-red-500" />
     if (up.includes("ATEN")) return <AlertTriangle size={12} className="text-amber-500" />
@@ -332,9 +373,10 @@ export default function ControlesPage() {
       risco: selectedRisco,
       owner: selectedOwner,
       focal: selectedFocal,
+      frequencia: selectedFrequencia,
       page: currentPage,
     })
-  }, [selectedMonth, searchTerm, selectedRisco, selectedOwner, selectedFocal, currentPage])
+  }, [selectedMonth, searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedFrequencia, currentPage])
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
@@ -354,7 +396,7 @@ export default function ControlesPage() {
       </header>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-center">
           <div className="relative">
             <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f71866] h-4 w-4" />
             <select
@@ -424,12 +466,27 @@ export default function ControlesPage() {
             ))}
           </select>
 
+          {/* ✅ NOVO: filtro de frequência */}
+          <select
+            value={selectedFrequencia}
+            onChange={(e) => setSelectedFrequencia(e.target.value)}
+            className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer"
+          >
+            <option value="Todos">Frequência (Todos)</option>
+            {frequenciasList.map((fr) => (
+              <option key={fr} value={fr}>
+                {fr}
+              </option>
+            ))}
+          </select>
+
           <button
             onClick={() => {
               setSearchTerm("")
               setSelectedRisco("Todos")
               setSelectedOwner("Todos")
               setSelectedFocal("Todos")
+              setSelectedFrequencia("Todos")
 
               const cur = getCurrentMonthISO()
               const nextMonth = monthOptions.includes(cur) ? cur : (monthOptions[0] || cur)
@@ -467,6 +524,9 @@ export default function ControlesPage() {
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Nome & Framework
                     </th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+                      Frequência
+                    </th>
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Control Owner
                     </th>
@@ -501,6 +561,12 @@ export default function ControlesPage() {
                             <div className="text-[11px] text-slate-400 font-medium uppercase mt-0.5">
                               {item.framework}
                             </div>
+                          </td>
+
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-[11px] font-bold text-slate-600">
+                              {safeText(item.frequencia) || "N/A"}
+                            </span>
                           </td>
 
                           <td className="px-6 py-4">
@@ -573,7 +639,7 @@ export default function ControlesPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-20 text-center text-slate-400 text-sm">
+                      <td colSpan={8} className="px-6 py-20 text-center text-slate-400 text-sm">
                         Nenhum controle encontrado para os critérios selecionados.
                       </td>
                     </tr>

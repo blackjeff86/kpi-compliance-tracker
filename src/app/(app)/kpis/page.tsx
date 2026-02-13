@@ -151,6 +151,17 @@ function buildKpisQuery(params: {
   return sp.toString()
 }
 
+// ✅ extrai o número do código para ordenar corretamente (01, 02, ... 100, 101)
+function extractKpiNumber(code: any): number {
+  const s = String(code || "").trim()
+  if (!s) return Number.POSITIVE_INFINITY
+  const matches = s.match(/\d+/g)
+  if (!matches || matches.length === 0) return Number.POSITIVE_INFINITY
+  const last = matches[matches.length - 1]
+  const n = Number(last)
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY
+}
+
 export default function KPIsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -227,27 +238,51 @@ export default function KPIsPage() {
       setLoadError(null)
 
       try {
-        const result = await fetchKPIs({
-          month: selectedMonth,
-          page: 1,
-          pageSize: 5000,
-        })
+        /**
+         * ✅ FIX: o backend pode limitar em 100 por request.
+         * Então buscamos em páginas com 100 para garantir o total correto (ex: 124).
+         */
+        const ALL_ROWS: any[] = []
+        const FETCH_PAGE_SIZE = 100
+        const MAX_PAGES = 500
 
-        if (!result?.success) {
-          setLoadError((result as any)?.error || "Falha ao carregar KPIs do banco.")
-          setKpisData([])
-          setLoading(false)
-          return
+        for (let p = 1; p <= MAX_PAGES; p++) {
+          const result = await fetchKPIs({
+            month: selectedMonth,
+            page: p,
+            pageSize: FETCH_PAGE_SIZE,
+          })
+
+          if (!result?.success) {
+            setLoadError((result as any)?.error || "Falha ao carregar KPIs do banco.")
+            setKpisData([])
+            setLoading(false)
+            return
+          }
+
+          const rowsPage = Array.isArray((result as any).data) ? (result as any).data : []
+          if (rowsPage.length === 0) break
+
+          ALL_ROWS.push(...rowsPage)
+
+          if (rowsPage.length < FETCH_PAGE_SIZE) break
         }
 
-        const rows = Array.isArray((result as any).data) ? (result as any).data : []
+        const rows = ALL_ROWS
 
         const uuids = rows
           .map((r: any) => String(r.kpi_uuid || "").trim())
           .filter(Boolean)
 
-        const runsRes = await fetchLatestKpiRunsForPeriod(uuids, selectedMonth)
-        const runMap = runsRes?.success && (runsRes as any).data ? (runsRes as any).data : {}
+        // ✅ evita payload grande: busca runs em chunks
+        const runMap: Record<string, any> = {}
+        const CHUNK = 400
+        for (let i = 0; i < uuids.length; i += CHUNK) {
+          const slice = uuids.slice(i, i + CHUNK)
+          const runsRes = await fetchLatestKpiRunsForPeriod(slice, selectedMonth)
+          const partial = runsRes?.success && (runsRes as any).data ? (runsRes as any).data : {}
+          Object.assign(runMap, partial)
+        }
 
         const mapped: KPIRecord[] = rows.map((r: any) => {
           const id = String(r.kpi_id || r.id || "").trim()
@@ -309,11 +344,12 @@ export default function KPIsPage() {
    * - Busca: nome OU id
    * - Framework/Tipo: match exato (dropdown)
    * - Status: match exato (dropdown; usa labels da UI)
+   * ✅ NOVO: ordena por Código do menor para o maior (01..100..)
    */
   const filteredKPIs = useMemo(() => {
     const s = searchTerm.trim().toLowerCase()
 
-    return kpisData.filter((kpi) => {
+    const filtered = kpisData.filter((kpi) => {
       const matchSearch =
         !s ||
         safeText(kpi.nome).toLowerCase().includes(s) ||
@@ -325,6 +361,15 @@ export default function KPIsPage() {
 
       return matchSearch && matchFramework && matchType && matchStatus
     })
+
+    return filtered
+      .slice()
+      .sort((a, b) => {
+        const na = extractKpiNumber(a.id)
+        const nb = extractKpiNumber(b.id)
+        if (na !== nb) return na - nb
+        return String(a.id).localeCompare(String(b.id), "pt-BR", { numeric: true, sensitivity: "base" })
+      })
   }, [kpisData, searchTerm, filterFramework, filterKpiType, filterStatus])
 
   const totalPages = Math.max(1, Math.ceil(filteredKPIs.length / pageSize))
