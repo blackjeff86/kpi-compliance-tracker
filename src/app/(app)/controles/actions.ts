@@ -1,3 +1,4 @@
+// src/app/(app)/controles/actions.ts
 "use server"
 
 import { neon } from "@neondatabase/serverless"
@@ -41,14 +42,79 @@ function normalizeKpiStatus(v: any): "GREEN" | "YELLOW" | "RED" | null {
 
 /**
  * ✅ Lista controles (1 por id_control)
+ * ✅ Agora já traz:
+ * - exec_done / exec_total
+ * - green/yellow/red counts
+ * - status_final (EM ABERTO | CONFORME | EM ATENÇÃO | NÃO CONFORME)
+ *
+ * Obs: period deve ser ISO "YYYY-MM" (ex: "2026-02")
  */
-export async function fetchControles() {
+export async function fetchControles(params?: { period?: string }) {
   try {
+    const period = safeText(params?.period)
+
+    // Se não passar período, mantém comportamento antigo (sem quebrar nada)
+    if (!period) {
+      const data = await sql`
+        SELECT *
+        FROM controls
+        ORDER BY id_control ASC
+      `
+      return { success: true as const, data }
+    }
+
+    // ✅ Query: consolida status do controle baseado nos KPIs do mês selecionado
     const data = await sql`
-      SELECT *
-      FROM controls
-      ORDER BY id_control ASC
+      WITH kpi_total AS (
+        SELECT
+          ck.id_control,
+          COUNT(*)::int AS exec_total
+        FROM control_kpis ck
+        GROUP BY ck.id_control
+      ),
+      runs_period AS (
+        SELECT
+          ck.id_control,
+          kr.status
+        FROM control_kpis ck
+        LEFT JOIN kpi_runs kr
+          ON kr.kpi_uuid = ck.kpi_uuid
+          AND kr.period = ${period}
+          AND kr.is_latest = TRUE
+      ),
+      agg AS (
+        SELECT
+          rp.id_control,
+          COUNT(rp.status)::int AS exec_done,
+          COUNT(*) FILTER (WHERE rp.status = 'GREEN')::int AS green_count,
+          COUNT(*) FILTER (WHERE rp.status = 'YELLOW')::int AS yellow_count,
+          COUNT(*) FILTER (WHERE rp.status = 'RED')::int AS red_count
+        FROM runs_period rp
+        GROUP BY rp.id_control
+      )
+      SELECT
+        c.*,
+
+        COALESCE(kt.exec_total, 0) AS exec_total,
+        COALESCE(a.exec_done, 0) AS exec_done,
+        COALESCE(a.green_count, 0) AS green_count,
+        COALESCE(a.yellow_count, 0) AS yellow_count,
+        COALESCE(a.red_count, 0) AS red_count,
+
+        CASE
+          WHEN COALESCE(kt.exec_total, 0) = 0 THEN 'EM ABERTO'
+          WHEN COALESCE(a.exec_done, 0) < COALESCE(kt.exec_total, 0) THEN 'EM ABERTO'
+          WHEN COALESCE(a.red_count, 0) > 0 THEN 'NÃO CONFORME'
+          WHEN COALESCE(a.yellow_count, 0) > 0 THEN 'EM ATENÇÃO'
+          ELSE 'CONFORME'
+        END AS status_final
+
+      FROM controls c
+      LEFT JOIN kpi_total kt ON kt.id_control = c.id_control
+      LEFT JOIN agg a ON a.id_control = c.id_control
+      ORDER BY c.id_control ASC
     `
+
     return { success: true as const, data }
   } catch (error) {
     console.error("Erro fetchControles:", error)
@@ -135,8 +201,6 @@ const MONTHS_PT_MAP: Record<string, string> = {
 function monthLabelToISO(label: string | null) {
   const raw = (label || "").toString().trim()
   if (!raw) return null
-
-  // já está no formato ISO
   if (/^\d{4}-\d{2}$/.test(raw)) return raw
 
   const m = raw.toLowerCase().match(/^([a-zçãõ]+)\s*\/\s*(\d{4})$/i)
@@ -165,11 +229,11 @@ function prevMonthISO(periodISO: string) {
 }
 
 /**
- * ✅ KPIs page (CORRIGIDO):
+ * ✅ KPIs page:
  * - catálogo: control_kpis (1 linha por kpi_id)
  * - last/previous: kpi_runs usando kpi_uuid + period
  * - NÃO usa MAX(uuid)
- * - entende month como "fevereiro / 2026" (UI) ou "2026-02"
+ * - month pode ser "fevereiro / 2026" (UI) ou "2026-02"
  */
 export async function fetchKPIs(params?: {
   month?: string
@@ -183,12 +247,11 @@ export async function fetchKPIs(params?: {
     const offset = (page - 1) * pageSize
 
     const monthRaw = safeText(params?.month)
-    const monthISO = monthLabelToISO(monthRaw) // ✅ converte "fevereiro / 2026" -> "2026-02"
+    const monthISO = monthLabelToISO(monthRaw)
     const prevISO = monthISO ? prevMonthISO(monthISO) : null
 
     const kpiType = safeText(params?.kpiType)
 
-    // total para paginação
     const totalRows = await sql`
       SELECT COUNT(DISTINCT ck.kpi_id)::int AS total
       FROM control_kpis ck
@@ -196,14 +259,12 @@ export async function fetchKPIs(params?: {
     `
     const total = Number(totalRows?.[0]?.total || 0)
 
-    // se não tem KPI nenhum, devolve vazio sem erro
     if (total === 0) {
       return { success: true as const, data: [] as any[], total: 0 }
     }
 
     const data = await sql`
       WITH kpi_catalog AS (
-        -- ✅ 1 linha por kpi_id, pegando o registro mais recente do catalog (sem MAX(uuid))
         SELECT DISTINCT ON (ck.kpi_id)
           ck.kpi_id,
           ck.kpi_uuid,
@@ -220,7 +281,6 @@ export async function fetchKPIs(params?: {
       ),
 
       last_run AS (
-        -- ✅ último run do MÊS selecionado por kpi_uuid
         SELECT DISTINCT ON (kr.kpi_uuid)
           kr.kpi_uuid,
           kr.period,
@@ -237,7 +297,6 @@ export async function fetchKPIs(params?: {
       ),
 
       prev_run AS (
-        -- ✅ último run do mês anterior (para trend)
         SELECT DISTINCT ON (kr.kpi_uuid)
           kr.kpi_uuid,
           kr.period,
@@ -285,11 +344,11 @@ export async function fetchKPIs(params?: {
 
 /**
  * ✅ Para salvar execução diretamente (opcional)
- * Agora resolve kpi_uuid via control_kpis (porque kpi_runs NÃO tem kpi_code)
+ * Agora resolve kpi_uuid via control_kpis
  * ✅ Normaliza status para o enum: GREEN|YELLOW|RED
  */
 export async function upsertKpiRun(input: {
-  kpi_code: string // aqui é o "kpi_id" texto (ex: "KPI ID 166")
+  kpi_code: string
   period: string
   measured_value: number | string
   status?: string
@@ -310,13 +369,11 @@ export async function upsertKpiRun(input: {
     if (!period) return { success: false as const, error: "period é obrigatório." }
     if (measured_value === null) return { success: false as const, error: "measured_value inválido." }
 
-    // ✅ status SEMPRE compatível com o enum do banco
-    const status = normalizeKpiStatus(input.status) // pode ser null
+    const status = normalizeKpiStatus(input.status)
     const evidence_link = safeText(input.evidence_link)
     const executor_comment = safeText(input.executor_comment)
     const created_by_email = safeText(input.created_by_email)
 
-    // ✅ resolve UUID do KPI
     const kpiRows = await sql`
       SELECT kpi_uuid
       FROM control_kpis
@@ -329,7 +386,6 @@ export async function upsertKpiRun(input: {
     }
     const kpi_uuid = kpiRows[0].kpi_uuid
 
-    // desmarca latest anterior
     await sql`
       UPDATE kpi_runs
       SET is_latest = FALSE,
@@ -339,7 +395,6 @@ export async function upsertKpiRun(input: {
         AND is_latest = TRUE
     `
 
-    // insere novo latest
     const inserted = await sql`
       INSERT INTO kpi_runs (
         kpi_id,
@@ -383,7 +438,7 @@ export async function upsertKpiRun(input: {
  * - Garante 1 linha por controle em `controls`
  * - Garante N linhas em `control_kpis`
  * ✅ garante kpi_uuid (UUID)
- * ✅ NÃO apaga todos os KPIs (para não quebrar runs já gravados)
+ * ✅ NÃO apaga todos os KPIs
  */
 export async function importarControles(controles: any[]) {
   try {
@@ -497,7 +552,6 @@ export async function importarControles(controles: any[]) {
         `
       }
 
-      // preenche kpi_uuid faltante
       await sql`
         UPDATE control_kpis
         SET kpi_uuid = COALESCE(kpi_uuid, gen_random_uuid()),

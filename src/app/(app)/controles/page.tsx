@@ -1,3 +1,4 @@
+// src/app/(app)/controles/page.tsx
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
@@ -23,7 +24,7 @@ import {
 import { fetchControles } from "./actions"
 
 interface Controle {
-  id: string // id_control do banco
+  id: string
   nome: string
   framework: string
   risco: string
@@ -32,6 +33,55 @@ interface Controle {
   corStatus: string
   reference_month: string
   control_owner: string
+  focal_point_name: string
+
+  exec_total: number
+  exec_done: number
+  green_count: number
+  yellow_count: number
+  red_count: number
+  status_final: "EM ABERTO" | "CONFORME" | "EM ATENÇÃO" | "NÃO CONFORME" | string
+}
+
+/** helpers mês */
+const MONTHS_PT = [
+  "janeiro","fevereiro","março","abril","maio","junho",
+  "julho","agosto","setembro","outubro","novembro","dezembro",
+]
+
+function safeText(v: any) {
+  if (v === null || v === undefined) return ""
+  return String(v).trim()
+}
+
+function formatPeriodoLabel(periodoISO: string) {
+  const s = safeText(periodoISO)
+  const m = s.match(/^(\d{4})-(\d{2})$/)
+  if (!m) return s || ""
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const monthName = MONTHS_PT[month - 1] || ""
+  return `${monthName} / ${year}`
+}
+
+function getCurrentMonthISO() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  return `${y}-${m}`
+}
+
+function buildMonthOptions(startYear = 2025, endYear?: number) {
+  const nowYear = new Date().getFullYear()
+  const yEnd = Number.isFinite(endYear as any) ? Number(endYear) : nowYear + 1 // inclui próximo ano
+  const out: string[] = []
+
+  for (let y = yEnd; y >= startYear; y--) {
+    for (let m = 12; m >= 1; m--) {
+      out.push(`${y}-${String(m).padStart(2, "0")}`)
+    }
+  }
+  return out
 }
 
 export default function ControlesPage() {
@@ -46,21 +96,29 @@ export default function ControlesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedRisco, setSelectedRisco] = useState("Todos")
   const [selectedOwner, setSelectedOwner] = useState("Todos")
+  const [selectedFocal, setSelectedFocal] = useState("Todos")
 
-  const getPreviousMonth = () => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - 1)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-  }
-  const [selectedMonth, setSelectedMonth] = useState(getPreviousMonth())
+  // ✅ FIXO: anos >= 2025 e meses jan-dez
+  const [monthOptions, setMonthOptions] = useState<string[]>([])
+  const [selectedMonth, setSelectedMonth] = useState<string>("")
+
   const [isNewControlModalOpen, setIsNewControlModalOpen] = useState(false)
 
-  // BUSCA DE DADOS COM MAPEAMENTO REFORÇADO
+  useEffect(() => {
+    const opts = buildMonthOptions(2025)
+    setMonthOptions(opts)
+
+    const cur = getCurrentMonthISO()
+    setSelectedMonth(opts.includes(cur) ? cur : (opts[0] || cur))
+  }, [])
+
   useEffect(() => {
     async function loadData() {
+      if (!selectedMonth) return
+
       try {
         setLoading(true)
-        const result = await fetchControles()
+        const result = await fetchControles({ period: selectedMonth })
 
         if (result.success && result.data) {
           const mappedData: Controle[] = result.data.map((item: any) => {
@@ -70,10 +128,19 @@ export default function ControlesPage() {
               framework: item.framework || "N/A",
               risco: item.risk_title || item.risco || "Medium",
               control_owner: item.owner_name || item.control_owner || item.owner || "Não atribuído",
+              focal_point_name: item.focal_point_name || item.focal || "Não atribuído",
+
               status: item.status || "Pendente",
               pendencia: item.pendencia_kpi || "Pendente",
               reference_month: item.reference_month || "",
               corStatus: "",
+
+              exec_total: Number(item.exec_total || 0),
+              exec_done: Number(item.exec_done || 0),
+              green_count: Number(item.green_count || 0),
+              yellow_count: Number(item.yellow_count || 0),
+              red_count: Number(item.red_count || 0),
+              status_final: String(item.status_final || "EM ABERTO"),
             }
           })
           setControles(mappedData)
@@ -89,33 +156,37 @@ export default function ControlesPage() {
       }
     }
     loadData()
-  }, [])
+  }, [selectedMonth])
 
   const processedData = useMemo(() => {
     return controles.map((ctrl) => {
-      const isCompletedThisMonth =
-        ctrl.reference_month === selectedMonth &&
-        (ctrl.status === "Conforme" || ctrl.status === "Concluido")
-      return {
-        ...ctrl,
-        displayStatus: isCompletedThisMonth ? "Finalizado" : "Em Aberto",
-      }
+      const total = Number(ctrl.exec_total || 0)
+      const done = Number(ctrl.exec_done || 0)
+      const displayStatus = total > 0 && done >= total ? "Finalizado" : "Em Aberto"
+      return { ...ctrl, displayStatus }
     })
-  }, [controles, selectedMonth])
+  }, [controles])
 
   const filteredData = useMemo(() => {
     return processedData.filter((item) => {
       const searchLower = searchTerm.toLowerCase()
-      const matchSearch = (item.nome + item.id + item.control_owner).toLowerCase().includes(searchLower)
+      const matchSearch = (item.nome + item.id + item.control_owner + item.focal_point_name).toLowerCase().includes(searchLower)
       const matchRisco = selectedRisco === "Todos" || item.risco === selectedRisco
       const matchOwner = selectedOwner === "Todos" || item.control_owner === selectedOwner
-      return matchSearch && matchRisco && matchOwner
+      const matchFocal = selectedFocal === "Todos" || item.focal_point_name === selectedFocal
+      return matchSearch && matchRisco && matchOwner && matchFocal
     })
-  }, [searchTerm, selectedRisco, selectedOwner, processedData])
+  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, processedData])
 
   const ownersList = useMemo(() => {
     return Array.from(new Set(controles.map((c) => c.control_owner)))
       .filter((o) => o && o !== "Não atribuído")
+      .sort()
+  }, [controles])
+
+  const focalsList = useMemo(() => {
+    return Array.from(new Set(controles.map((c) => c.focal_point_name)))
+      .filter((f) => f && f !== "Não atribuído")
       .sort()
   }, [controles])
 
@@ -127,7 +198,7 @@ export default function ControlesPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedRisco, selectedOwner, selectedMonth])
+  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedMonth])
 
   const getRiskStyles = (risco: string) => {
     const r = (risco || "").toLowerCase()
@@ -136,6 +207,22 @@ export default function ControlesPage() {
     if (r.includes("high") || r.includes("alto")) return "bg-orange-50 text-orange-600 border-orange-100"
     if (r.includes("critical") || r.includes("crítico")) return "bg-red-50 text-red-600 border-red-100"
     return "bg-slate-50 text-slate-600 border-slate-100"
+  }
+
+  const getFinalStatusStyle = (s: string) => {
+    const up = (s || "").toUpperCase()
+    if (up.includes("CONFORME") && !up.includes("NÃO")) return { text: "text-emerald-600", dot: "bg-emerald-500" }
+    if (up.includes("NÃO")) return { text: "text-red-600", dot: "bg-red-500" }
+    if (up.includes("ATEN")) return { text: "text-amber-600", dot: "bg-amber-500" }
+    return { text: "text-amber-600", dot: "bg-amber-500" }
+  }
+
+  const pickStatusIcon = (s: string) => {
+    const up = (s || "").toUpperCase()
+    if (up.includes("CONFORME") && !up.includes("NÃO")) return <CheckCircle2 size={12} className="text-emerald-500" />
+    if (up.includes("NÃO")) return <AlertTriangle size={12} className="text-red-500" />
+    if (up.includes("ATEN")) return <AlertTriangle size={12} className="text-amber-500" />
+    return <Clock size={12} className="text-amber-500" />
   }
 
   return (
@@ -155,19 +242,25 @@ export default function ControlesPage() {
         </button>
       </header>
 
-      {/* FILTROS */}
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-center">
           <div className="relative">
             <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f71866] h-4 w-4" />
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-[#f71866]/5 border-transparent text-[#f71866] rounded-lg text-sm font-bold outline-none cursor-pointer appearance-none"
+              disabled={monthOptions.length === 0}
+              className="w-full pl-10 pr-4 py-2 bg-[#f71866]/5 border-transparent text-[#f71866] rounded-lg text-sm font-bold outline-none cursor-pointer appearance-none disabled:opacity-60"
             >
-              <option value="2026-02">fevereiro / 2026</option>
-              <option value="2026-01">janeiro / 2026</option>
-              <option value="2025-12">dezembro / 2025</option>
+              {monthOptions.length === 0 ? (
+                <option value="">Sem meses disponíveis</option>
+              ) : (
+                monthOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {formatPeriodoLabel(m)}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -207,12 +300,28 @@ export default function ControlesPage() {
             ))}
           </select>
 
+          <select
+            value={selectedFocal}
+            onChange={(e) => setSelectedFocal(e.target.value)}
+            className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer"
+          >
+            <option value="Todos">Focal Point (Todos)</option>
+            {focalsList.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+
           <button
             onClick={() => {
               setSearchTerm("")
               setSelectedRisco("Todos")
               setSelectedOwner("Todos")
-              setSelectedMonth(getPreviousMonth())
+              setSelectedFocal("Todos")
+
+              // ✅ volta para o mês atual (sempre existe na lista gerada)
+              setSelectedMonth(getCurrentMonthISO())
             }}
             className="text-[11px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors py-2 text-center"
           >
@@ -242,6 +351,9 @@ export default function ControlesPage() {
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Control Owner
                     </th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Focal Point
+                    </th>
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
                       Status
                     </th>
@@ -255,81 +367,95 @@ export default function ControlesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedControles.length > 0 ? (
-                    paginatedControles.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50/30 transition-colors group">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                            {item.id}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-bold text-slate-700">{item.nome}</div>
-                          <div className="text-[11px] text-slate-400 font-medium uppercase mt-0.5">
-                            {item.framework}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[#f71866]">
-                              <User size={14} />
-                            </div>
-                            <span className="text-xs font-bold text-slate-600">{item.control_owner}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {item.displayStatus === "Em Aberto" ? (
-                              <Clock size={12} className="text-amber-500" />
-                            ) : (
-                              <CheckCircle2 size={12} className="text-emerald-500" />
-                            )}
-                            <span
-                              className={`text-[11px] font-bold ${
-                                item.displayStatus === "Em Aberto" ? "text-amber-600" : "text-emerald-600"
-                              }`}
-                            >
-                              {item.displayStatus}
+                    paginatedControles.map((item) => {
+                      const st = getFinalStatusStyle(item.status_final)
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/30 transition-colors group">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                              {item.id}
                             </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getRiskStyles(
-                              item.risco
-                            )}`}
-                          >
-                            {item.risco}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-center gap-4">
-                            {/* ✅ AQUI ESTÁ A CORREÇÃO: leva o período selecionado pro detalhe */}
-                            <Link
-                              href={`/controles/${encodeURIComponent(item.id)}?periodo=${encodeURIComponent(selectedMonth)}`}
-                              className="text-[10px] font-bold text-slate-400 hover:text-[#f71866] uppercase transition-colors"
-                            >
-                              Detalhes
-                            </Link>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-bold text-slate-700">{item.nome}</div>
+                            <div className="text-[11px] text-slate-400 font-medium uppercase mt-0.5">
+                              {item.framework}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[#f71866]">
+                                <User size={14} />
+                              </div>
+                              <span className="text-xs font-bold text-slate-600">{item.control_owner}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[#f71866]">
+                                <User size={14} />
+                              </div>
+                              <span className="text-xs font-bold text-slate-600">{item.focal_point_name}</span>
+                            </div>
+                          </td>
 
-                            <button
-                              onClick={() =>
-                                router.push(`/controles/execucao/${encodeURIComponent(item.id)}?periodo=${encodeURIComponent(selectedMonth)}`)
-                              }
-                              className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-widest ${
-                                item.displayStatus === "Em Aberto"
-                                  ? "bg-[#f71866] text-white shadow-md shadow-red-100"
-                                  : "border border-[#f71866] text-[#f71866]"
-                              }`}
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {pickStatusIcon(item.status_final)}
+                                <span className={`text-[11px] font-bold ${st.text}`}>
+                                  {item.status_final}
+                                </span>
+                              </div>
+
+                              <div className="mt-1 flex items-center gap-2 text-[10px] font-bold text-slate-400">
+                                <span className="px-1.5 py-0.5 rounded bg-slate-50 border border-slate-100">
+                                  {item.exec_done}/{item.exec_total}
+                                </span>
+
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                  <span>{item.green_count}</span>
+                                </span>
+
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                  <span>{item.yellow_count}</span>
+                                </span>
+
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                                  <span>{item.red_count}</span>
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-6 py-4 text-center">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getRiskStyles(
+                                item.risco
+                              )}`}
                             >
-                              {item.displayStatus === "Em Aberto" ? "Registrar" : "Revisar"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                              {item.risco}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-4">
+                              <Link
+                                href={`/controles/${encodeURIComponent(item.id)}?periodo=${encodeURIComponent(selectedMonth)}`}
+                                className="text-[10px] font-bold text-slate-400 hover:text-[#f71866] uppercase transition-colors"
+                              >
+                                Detalhes
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center text-slate-400 text-sm">
+                      <td colSpan={7} className="px-6 py-20 text-center text-slate-400 text-sm">
                         Nenhum controle encontrado para os critérios selecionados.
                       </td>
                     </tr>
@@ -364,7 +490,6 @@ export default function ControlesPage() {
         )}
       </div>
 
-      {/* DASHBOARD RESUMIDO */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
         <StatSmallCard
           icon={<ShieldCheck className="text-emerald-500" />}
@@ -386,7 +511,6 @@ export default function ControlesPage() {
         />
       </div>
 
-      {/* MODAL DE ADIÇÃO */}
       {isNewControlModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsNewControlModalOpen(false)} />

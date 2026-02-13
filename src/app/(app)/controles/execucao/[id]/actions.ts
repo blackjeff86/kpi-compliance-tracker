@@ -10,6 +10,45 @@ function safeText(v: any) {
   return s.length ? s : null
 }
 
+function safeNumber(v: any): number | null {
+  if (v === null || v === undefined) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+/** ===== Regras (mesmo padrão do admin) ===== */
+export type AdminKpiRules = {
+  yellow_ratio: number
+  zero_meta_yellow_max: number
+}
+
+const DEFAULT_RULES: AdminKpiRules = {
+  yellow_ratio: 0.9,
+  zero_meta_yellow_max: 1,
+}
+
+function normalizeRules(input: any): AdminKpiRules {
+  const yellow_ratio = safeNumber(input?.yellow_ratio)
+  const zero_meta_yellow_max = safeNumber(input?.zero_meta_yellow_max)
+
+  return {
+    yellow_ratio: clamp(yellow_ratio ?? DEFAULT_RULES.yellow_ratio, 0.01, 0.999),
+    zero_meta_yellow_max: clamp(zero_meta_yellow_max ?? DEFAULT_RULES.zero_meta_yellow_max, 0, 999999),
+  }
+}
+
+export type KpiEvaluationMode = "UP" | "DOWN" | "BOOLEAN"
+
+function normalizeMode(v: any): KpiEvaluationMode {
+  const s = String(v || "").trim().toUpperCase()
+  if (s === "UP" || s === "DOWN" || s === "BOOLEAN") return s
+  return "UP"
+}
+
 function parseNumberLoose(v: any): number | null {
   if (v === null || v === undefined) return null
   if (typeof v === "number" && Number.isFinite(v)) return v
@@ -22,30 +61,57 @@ function parseNumberLoose(v: any): number | null {
   return null
 }
 
+function parseBooleanLoose(v: any): boolean | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === "boolean") return v
+
+  const s = String(v).trim().toLowerCase()
+  if (!s) return null
+
+  if (["true", "t", "1", "sim", "s", "yes", "y", "ok", "conforme"].includes(s)) return true
+  if (["false", "f", "0", "nao", "não", "n", "no", "fail", "não conforme"].includes(s)) return false
+
+  return null
+}
+
 /**
- * ✅ PADRÃO do ENUM kpi_status no banco:
- * - GREEN
- * - YELLOW
- * - RED
+ * ✅ Cálculo universal:
+ * - BOOLEAN: compara medido vs target (true/false)
+ * - UP: maior melhor (>= meta) com faixa yellow = meta * yellow_ratio
+ * - DOWN: menor melhor (<= meta) com faixa yellow = meta..(meta+buffer)
  */
-function computeKpiStatus(metaRaw: any, atualRaw: any): "GREEN" | "YELLOW" | "RED" {
-  const metaN = parseNumberLoose(metaRaw)
-  const atualN = parseNumberLoose(atualRaw)
+function computeKpiStatusUniversal(params: {
+  mode: KpiEvaluationMode
+  target: any
+  measured: any
+  rules: AdminKpiRules
+}): "GREEN" | "YELLOW" | "RED" {
+  const mode = normalizeMode(params.mode)
+  const r = normalizeRules(params.rules)
 
-  // se não dá pra calcular, fica YELLOW
-  if (metaN === null || atualN === null) return "YELLOW"
+  if (mode === "BOOLEAN") {
+    const t = parseBooleanLoose(params.target)
+    const m = parseBooleanLoose(params.measured)
+    if (t === null || m === null) return "YELLOW"
+    return m === t ? "GREEN" : "RED"
+  }
 
-  // regra:
-  // - meta = 0 => "quanto menor melhor" (ex.: pendências)
-  // - meta > 0 => "quanto maior melhor" (ex.: % conformidade)
-  const lowerIsBetter = metaN === 0
+  const targetN = parseNumberLoose(params.target)
+  const measuredN = parseNumberLoose(params.measured)
+  if (targetN === null || measuredN === null) return "YELLOW"
 
-  const ok = lowerIsBetter ? atualN <= metaN : atualN >= metaN
-  const critical = lowerIsBetter ? atualN > metaN : false
+  if (mode === "UP") {
+    const yellowFloor = targetN * r.yellow_ratio
+    if (measuredN >= targetN) return "GREEN"
+    if (measuredN >= yellowFloor) return "YELLOW"
+    return "RED"
+  }
 
-  if (ok) return "GREEN"
-  if (critical) return "RED"
-  return "YELLOW"
+  // DOWN
+  const bufferMax = targetN + r.zero_meta_yellow_max
+  if (measuredN <= targetN) return "GREEN"
+  if (measuredN > targetN && measuredN <= bufferMax) return "YELLOW"
+  return "RED"
 }
 
 function isUuidLike(v: any) {
@@ -53,18 +119,41 @@ function isUuidLike(v: any) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
 }
 
+async function fetchRulesForKpi(kpiUuid: string | null): Promise<{ rules: AdminKpiRules; warning?: string }> {
+  try {
+    // 1) regra por KPI
+    if (kpiUuid) {
+      const key = `kpi_rules:${kpiUuid}`
+      const r1 = await sql`
+        SELECT value_json
+        FROM admin_settings
+        WHERE key = ${key}
+        LIMIT 1
+      `
+      if (r1?.length) return { rules: normalizeRules(r1[0]?.value_json) }
+    }
+
+    // 2) regra global
+    const r2 = await sql`
+      SELECT value_json
+      FROM admin_settings
+      WHERE key = 'kpi_rules'
+      LIMIT 1
+    `
+    if (r2?.length) return { rules: normalizeRules(r2[0]?.value_json) }
+
+    return { rules: DEFAULT_RULES, warning: "Nenhuma regra encontrada em admin_settings. Usando padrão." }
+  } catch {
+    return { rules: DEFAULT_RULES, warning: "Tabela admin_settings não disponível. Usando padrão." }
+  }
+}
+
 /**
  * Carrega:
  * - controle (controls)
- * - KPI do controle (control_kpis) resolvendo por:
- *    a) kpi_uuid (UUID)  OU
- *    b) kpi_id (TEXT "KPI ID 166") OU
- *    c) kpi_name (TEXT)
- * - execução do período (kpi_runs) usando:
- *    kpi_runs.kpi_uuid (UUID) + period
- *
- * ⚠️ IMPORTANTE:
- * kpi_runs.kpi_id tem FK para kpis(id), então aqui usamos kpi_uuid mesmo.
+ * - KPI do controle (control_kpis)
+ * - regras do KPI (admin_settings)
+ * - execução do período (kpi_runs) por kpi_uuid + period
  */
 export async function fetchExecucaoContext(params: {
   id_control: string
@@ -103,17 +192,19 @@ export async function fetchExecucaoContext(params: {
           FROM control_kpis
           WHERE id_control = ${id_control}
             AND (kpi_id = ${kpi} OR kpi_name = ${kpi})
-          ORDER BY kpi_id ASC
+          ORDER BY updated_at DESC NULLS LAST, created_at DESC
           LIMIT 1
         `
 
     if (!kpiRows?.length) return { success: false, error: "KPI não encontrado para este controle." }
     const kpiRow = kpiRows[0]
 
-    const kpiUuid = kpiRow.kpi_uuid
+    const kpiUuid = kpiRow.kpi_uuid ? String(kpiRow.kpi_uuid) : null
     if (!kpiUuid) return { success: false, error: "KPI sem kpi_uuid em control_kpis." }
 
-    // ✅ Busca execução por kpi_runs.kpi_uuid + period (sem FK)
+    const { rules, warning } = await fetchRulesForKpi(kpiUuid)
+
+    // ✅ Busca execução latest do período
     const runRows = await sql`
       SELECT *
       FROM kpi_runs
@@ -129,9 +220,14 @@ export async function fetchExecucaoContext(params: {
       success: true,
       data: {
         control,
-        kpi: kpiRow,
+        kpi: {
+          ...kpiRow,
+          kpi_evaluation_mode: normalizeMode(kpiRow?.kpi_evaluation_mode),
+        },
         run,
+        rules,
       },
+      ...(warning ? { warning } : {}),
     }
   } catch (error: any) {
     console.error("Erro fetchExecucaoContext:", error)
@@ -140,18 +236,16 @@ export async function fetchExecucaoContext(params: {
 }
 
 /**
- * Salva execução do KPI no período (kpi_runs):
- * - resolve o KPI para control_kpis.kpi_uuid
- * - grava em kpi_runs.kpi_uuid (UUID)  ✅ (sem FK)
- * - opcionalmente grava kpi_code (texto) para compatibilidade
+ * Salva execução:
+ * - resolve KPI para kpi_uuid
+ * - calcula status automaticamente usando mode + rules + target
  * - garante 1 latest por (kpi_uuid, period)
- * - created_by_email é NOT NULL -> sempre preencher
  */
 export async function saveKpiExecution(payload: {
   id_control: string
-  kpi_id: string
+  kpi_id: string // pode ser uuid ou texto; aqui seguimos seu padrão atual
   period: string
-  measured_value: number | null
+  measured_value: any
   executor_comment: string | null
   evidence_link: string | null
   created_by_email?: string | null
@@ -165,20 +259,17 @@ export async function saveKpiExecution(payload: {
     if (!kpi_ref) return { success: false, error: "kpi_id é obrigatório." }
     if (!period) return { success: false, error: "period é obrigatório." }
 
-    const measured_value = payload.measured_value === null ? null : parseNumberLoose(payload.measured_value)
-    if (measured_value === null) return { success: false, error: "measured_value inválido." }
-
-    // resolve para control_kpis.kpi_uuid + pega meta + pega kpi_id(texto) pra salvar em kpi_code (opcional)
+    // resolve KPI e já traz target + mode + kpi_id(texto) pra kpi_code
     const kpiRows = isUuidLike(kpi_ref)
       ? await sql`
-          SELECT kpi_uuid, kpi_target, kpi_id
+          SELECT kpi_uuid, kpi_target, kpi_id, kpi_evaluation_mode
           FROM control_kpis
           WHERE id_control = ${id_control}
             AND kpi_uuid = (${kpi_ref})::uuid
           LIMIT 1
         `
       : await sql`
-          SELECT kpi_uuid, kpi_target, kpi_id
+          SELECT kpi_uuid, kpi_target, kpi_id, kpi_evaluation_mode
           FROM control_kpis
           WHERE id_control = ${id_control}
             AND (kpi_id = ${kpi_ref} OR kpi_name = ${kpi_ref})
@@ -188,19 +279,38 @@ export async function saveKpiExecution(payload: {
 
     if (!kpiRows?.length) return { success: false, error: "KPI não encontrado no controle." }
 
-    const kpiUuid = kpiRows[0].kpi_uuid
-    const meta = kpiRows[0].kpi_target
+    const kpiUuid = kpiRows[0].kpi_uuid ? String(kpiRows[0].kpi_uuid) : null
+    const target = kpiRows[0].kpi_target
+    const mode = normalizeMode(kpiRows[0].kpi_evaluation_mode)
     const kpiCodeText = safeText(kpiRows[0].kpi_id) // ex: "KPI ID 166"
 
     if (!kpiUuid) return { success: false, error: "KPI sem kpi_uuid em control_kpis." }
 
-    const kpiStatus = computeKpiStatus(meta, measured_value)
+    const { rules } = await fetchRulesForKpi(kpiUuid)
 
-    // created_by_email é NOT NULL no seu banco -> default seguro
-    const createdBy =
-      safeText(payload.created_by_email) || "system@grc.local"
+    // ✅ valida medição conforme modo
+    let measuredToStore: string | null = null
+    if (mode === "BOOLEAN") {
+      const b = parseBooleanLoose(payload.measured_value)
+      if (b === null) return { success: false, error: "measured_value inválido para KPI BOOLEAN (use Sim/Não)." }
+      // salvamos numérico 1/0 pra manter compatibilidade com telas que tratam como number
+      measuredToStore = b ? "1" : "0"
+    } else {
+      const n = parseNumberLoose(payload.measured_value)
+      if (n === null) return { success: false, error: "measured_value inválido (numérico)." }
+      measuredToStore = String(n)
+    }
 
-    // 1) desmarca latest anterior por (kpi_uuid, period)
+    const status = computeKpiStatusUniversal({
+      mode,
+      target,
+      measured: mode === "BOOLEAN" ? (measuredToStore === "1" ? "true" : "false") : measuredToStore,
+      rules,
+    })
+
+    const createdBy = safeText(payload.created_by_email) || "system@grc.local"
+
+    // 1) desmarca latest anterior
     await sql`
       UPDATE kpi_runs
       SET is_latest = FALSE,
@@ -211,7 +321,6 @@ export async function saveKpiExecution(payload: {
     `
 
     // 2) insere novo latest
-    // ⚠️ kpi_id (FK para kpis.id) deixamos NULL para não estourar FK
     const inserted = await sql`
       INSERT INTO kpi_runs (
         kpi_id,
@@ -231,8 +340,8 @@ export async function saveKpiExecution(payload: {
         ${kpiUuid},
         ${kpiCodeText},
         ${period},
-        ${String(measured_value)},
-        ${kpiStatus},
+        ${measuredToStore},
+        ${status},
         ${safeText(payload.evidence_link)},
         ${safeText(payload.executor_comment)},
         ${createdBy},
