@@ -140,6 +140,7 @@ export default function RegistrarExecucaoPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingEvidence, setUploadingEvidence] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -155,6 +156,12 @@ export default function RegistrarExecucaoPage() {
 
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [notes, setNotes] = useState<string>("")
+  const [actionPlan, setActionPlan] = useState({
+    description: "",
+    responsible: "",
+    due_date: "",
+    criticality: "Alta",
+  })
 
   useEffect(() => {
     async function load() {
@@ -308,14 +315,68 @@ export default function RegistrarExecucaoPage() {
     setSaveError(null)
 
     try {
+      if (computedStatus === "RED") {
+        if (
+          !safeText(actionPlan.description) ||
+          !safeText(actionPlan.responsible) ||
+          !safeText(actionPlan.due_date) ||
+          !safeText(actionPlan.criticality)
+        ) {
+          setSaveError(
+            "Para finalizar um registro crítico, preencha o Plano de Ação (descrição, responsável, data limite e criticidade)."
+          )
+          setSaving(false)
+          return
+        }
+      }
+
+      let evidenceLinkToSave: string | null = null
+      if (arquivo) {
+        setUploadingEvidence(true)
+        const fd = new FormData()
+        fd.append("file", arquivo)
+        fd.append("period", periodoISO)
+        fd.append("id_control", id)
+        fd.append("kpi_id", safeText(kpi?.kpi_id || kpi?.kpi_name || kpiUuid))
+
+        const uploadResp = await fetch("/api/evidence/upload", {
+          method: "POST",
+          body: fd,
+        })
+
+        const uploadJson = await uploadResp.json().catch(() => ({}))
+        if (!uploadResp.ok || !uploadJson?.success) {
+          setSaveError(uploadJson?.error || "Falha ao enviar evidência para o Google Drive.")
+          setUploadingEvidence(false)
+          setSaving(false)
+          return
+        }
+
+        evidenceLinkToSave =
+          safeText(uploadJson?.data?.web_view_link) ||
+          safeText(uploadJson?.data?.web_content_link) ||
+          safeText(uploadJson?.data?.file_name) ||
+          arquivo.name
+        setUploadingEvidence(false)
+      }
+
       const res = await saveKpiExecution({
         id_control: id,
         kpi_id: kpiUuid, // ✅ sempre por UUID
         period: periodoISO,
         measured_value: measuredToSend,
         executor_comment: notes || null,
-        evidence_link: arquivo ? arquivo.name : null,
+        evidence_link: evidenceLinkToSave,
         created_by_email: null,
+        action_plan:
+          computedStatus === "RED"
+            ? {
+                description: actionPlan.description,
+                responsible: actionPlan.responsible,
+                due_date: actionPlan.due_date,
+                criticality: actionPlan.criticality,
+              }
+            : null,
       })
 
       if (!res.success) {
@@ -327,6 +388,7 @@ export default function RegistrarExecucaoPage() {
     } catch {
       setSaveError("Erro ao salvar no servidor.")
     } finally {
+      setUploadingEvidence(false)
       setSaving(false)
     }
   }
@@ -363,6 +425,12 @@ export default function RegistrarExecucaoPage() {
   const kpiDescText = safeText(kpi?.kpi_description || "")
   const kpiTypeText = safeText(kpi?.kpi_type || "")
   const kpiTargetText = safeText(kpi?.kpi_target || "")
+  const controlNameText = safeText(control?.name_control || "")
+  const controlDescText = safeText(control?.description_control || "")
+  const controlFrequencyText = safeText(
+    control?.frequency || control?.control_frequency || control?.frequency_title || control?.frequency_name || ""
+  )
+  const controlRiskText = safeText(control?.risk_title || "")
 
   return (
     <div className="min-h-screen bg-[#f8f5f6] text-slate-800 font-sans animate-in fade-in duration-500">
@@ -413,6 +481,39 @@ export default function RegistrarExecucaoPage() {
                 <Calendar size={18} />
               </div>
               <span className="font-semibold text-slate-700 text-sm tracking-tight capitalize">{periodoLabel}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="bg-slate-50/50 px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+            <Shield size={16} className="text-[#f71866]" />
+            <h2 className="font-bold text-slate-800 text-[11px] uppercase tracking-widest">
+              Detalhamento do Controle em Revisão
+            </h2>
+          </div>
+
+          <div className="p-6 md:p-8 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 md:col-span-2">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">Nome do Controle</span>
+                <div className="text-sm font-extrabold text-slate-800 break-words">{controlNameText || "N/A"}</div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">Frequência</span>
+                <div className="text-sm font-extrabold text-slate-800 break-words">{controlFrequencyText || "N/A"}</div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 md:col-span-2">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">Descrição do Controle</span>
+                <p className="text-[12px] text-slate-600 leading-relaxed whitespace-pre-wrap">{controlDescText || "N/A"}</p>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">Classificação de Risco</span>
+                <div className="text-sm font-extrabold text-slate-800 break-words">{controlRiskText || "N/A"}</div>
+              </div>
             </div>
           </div>
         </section>
@@ -529,6 +630,11 @@ export default function RegistrarExecucaoPage() {
                     {arquivo ? arquivo.name : "Arraste o documento ou clique para selecionar"}
                   </p>
                 </div>
+                {uploadingEvidence ? (
+                  <p className="text-[10px] font-semibold text-slate-500 flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" /> Enviando evidência para o Google Drive...
+                  </p>
+                ) : null}
               </div>
 
               <div className="md:col-span-2 space-y-3">
@@ -544,6 +650,65 @@ export default function RegistrarExecucaoPage() {
                 />
               </div>
             </div>
+
+            {computedStatus === "RED" && (
+              <div className="border border-red-100 bg-red-50/40 rounded-xl p-5">
+                <div className="flex items-center gap-2 text-red-700 mb-4">
+                  <AlertCircle size={16} />
+                  <h3 className="text-[11px] font-black uppercase tracking-widest">
+                    Plano de Ação Obrigatório para Status Crítico
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Descrição do Plano</label>
+                    <textarea
+                      rows={3}
+                      value={actionPlan.description}
+                      onChange={(e) => setActionPlan((p) => ({ ...p, description: e.target.value }))}
+                      placeholder="Descreva as ações de remediação para este KPI crítico..."
+                      className="w-full bg-white border border-red-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Responsável</label>
+                    <input
+                      type="text"
+                      value={actionPlan.responsible}
+                      onChange={(e) => setActionPlan((p) => ({ ...p, responsible: e.target.value }))}
+                      placeholder="Nome do responsável"
+                      className="w-full bg-white border border-red-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Data Limite</label>
+                    <input
+                      type="date"
+                      value={actionPlan.due_date}
+                      onChange={(e) => setActionPlan((p) => ({ ...p, due_date: e.target.value }))}
+                      className="w-full bg-white border border-red-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+                    />
+                  </div>
+
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Criticidade do Plano</label>
+                    <select
+                      value={actionPlan.criticality}
+                      onChange={(e) => setActionPlan((p) => ({ ...p, criticality: e.target.value }))}
+                      className="w-full bg-white border border-red-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+                    >
+                      <option value="Baixa">Baixa</option>
+                      <option value="Média">Média</option>
+                      <option value="Alta">Alta</option>
+                      <option value="Crítica">Crítica</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {saveError && (
               <div className="mt-6 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
@@ -570,7 +735,7 @@ export default function RegistrarExecucaoPage() {
             }`}
           >
             {saving ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} className="group-hover:scale-110 transition-transform" />}
-            {saving ? "SALVANDO..." : "FINALIZAR REGISTRO"}
+            {saving ? (uploadingEvidence ? "ENVIANDO E SALVANDO..." : "SALVANDO...") : "FINALIZAR REGISTRO"}
           </button>
         </div>
       </main>

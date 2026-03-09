@@ -5,6 +5,17 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
+async function ensureGrcReviewColumns() {
+  try {
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_final_status text`
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_review_comment text`
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_reviewed_at timestamptz`
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_reviewed_by_email text`
+  } catch (error) {
+    console.warn("Não foi possível garantir colunas de revisão GRC em kpi_runs:", error)
+  }
+}
+
 /** Utils */
 function safeText(v: any) {
   if (v === null || v === undefined) return null
@@ -16,6 +27,156 @@ function safeNumber(v: any) {
   if (v === null || v === undefined) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
+}
+
+function parseNumberLoose(v: any): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  const s = String(v).trim().replace("%", "").replace(",", ".")
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+type ImportedKpiValueType = "PERCENT" | "NUMBER" | "BOOLEAN"
+type ImportedKpiMode = "UP" | "DOWN" | "BOOLEAN"
+
+function parseBooleanLoose(v: any): boolean | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === "boolean") return v
+  const s = String(v).trim().toLowerCase()
+  if (!s) return null
+  if (["true", "t", "1", "sim", "s", "yes", "y", "ok", "conforme"].includes(s)) return true
+  if (["false", "f", "0", "nao", "não", "n", "no", "fail", "nao conforme", "não conforme"].includes(s)) return false
+  return null
+}
+
+function normalizeImportedValueType(v: any): ImportedKpiValueType | null {
+  const s = String(v ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_")
+  if (!s) return null
+  if (["BOOLEAN", "BOOL", "SIM_NAO", "SIM/NAO", "SIM/NAO", "YES_NO", "YES/NO"].includes(s)) return "BOOLEAN"
+  if (["PERCENT", "PERCENTUAL", "PERCENTAGE", "%"].includes(s)) return "PERCENT"
+  if (["NUMBER", "NUMERIC", "NUMERAL", "NUMERO", "NÚMERO"].includes(s)) return "NUMBER"
+  return null
+}
+
+function normalizeImportedMode(v: any): ImportedKpiMode | null {
+  const s = String(v ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_")
+  if (!s) return null
+  if (["BOOLEAN", "BOOL"].includes(s)) return "BOOLEAN"
+  if (["UP", "HIGHER_BETTER", "MAIOR_MELHOR", "MAIOR", "ASC", "ASCENDENTE", "INCREASE"].includes(s)) return "UP"
+  if (["DOWN", "LOWER_BETTER", "MENOR_MELHOR", "MENOR", "DESC", "DESCENDENTE", "DECREASE"].includes(s)) return "DOWN"
+  return null
+}
+
+function inferValueTypeFromTarget(targetRaw: any): ImportedKpiValueType {
+  const boolV = parseBooleanLoose(targetRaw)
+  if (boolV !== null) return "BOOLEAN"
+  const targetText = String(targetRaw ?? "").trim()
+  if (targetText.includes("%")) return "PERCENT"
+  return "NUMBER"
+}
+
+function resolveCsvKpiConfig(row: any): {
+  kpiTargetToStore?: string
+  kpiModeToStore?: ImportedKpiMode
+  settingsPayload?: Record<string, any>
+  warning?: string
+} {
+  const hasConfigSignal = [
+    row.kpi_value_type,
+    row.kpi_direction,
+    row.kpi_warning_margin,
+    row.kpi_evaluation_mode,
+    row.kpi_goal_direction,
+    row.kpi_warning_band,
+    row.kpi_warning_range,
+    row.kpi_faixa_warning,
+  ].some((v) => safeText(v))
+
+  if (!hasConfigSignal) return {}
+
+  const rawValueType =
+    row.kpi_value_type ??
+    row.kpi_target_type ??
+    row.kpi_metric_type ??
+    row.kpi_value_kind ??
+    row.kpi_tipo_valor ??
+    null
+
+  const valueType = normalizeImportedValueType(rawValueType) ?? inferValueTypeFromTarget(row.kpi_target)
+  const normalizedModeFromRow =
+    normalizeImportedMode(row.kpi_direction) ??
+    normalizeImportedMode(row.kpi_evaluation_mode) ??
+    normalizeImportedMode(row.kpi_goal_direction)
+
+  if (valueType === "BOOLEAN") {
+    const boolTarget = parseBooleanLoose(row.kpi_target ?? row.kpi_target_boolean ?? row.target_boolean)
+    if (boolTarget === null) {
+      return { warning: "KPI booleano com meta inválida (use Sim/Não)." }
+    }
+    const modeToStore: ImportedKpiMode = "BOOLEAN"
+    return {
+      kpiTargetToStore: boolTarget ? "true" : "false",
+      kpiModeToStore: modeToStore,
+      settingsPayload: {
+        yellow_ratio: 0.9,
+        zero_meta_yellow_max: 1,
+        warning_margin: 0,
+        value_type: valueType,
+        direction: modeToStore,
+      },
+    }
+  }
+
+  const targetN = parseNumberLoose(row.kpi_target ?? row.target_value)
+  if (targetN === null) {
+    return { warning: "KPI numérico/percentual com meta inválida." }
+  }
+
+  const warningN = parseNumberLoose(
+    row.kpi_warning_margin ?? row.warning_margin ?? row.kpi_warning_band ?? row.kpi_warning_range ?? row.kpi_faixa_warning
+  )
+  if (warningN === null || warningN < 0) {
+    return { warning: "KPI com faixa de warning inválida." }
+  }
+
+  const modeToStore: ImportedKpiMode = normalizedModeFromRow === "DOWN" ? "DOWN" : "UP"
+  if (modeToStore === "UP" && targetN <= 0) {
+    return { warning: "KPI UP com meta <= 0 não permite cálculo de faixa de warning." }
+  }
+
+  const rules =
+    modeToStore === "UP"
+      ? {
+          yellow_ratio: clamp((targetN - warningN) / targetN, 0.01, 0.999),
+          zero_meta_yellow_max: clamp(warningN, 0, 999999),
+        }
+      : {
+          yellow_ratio: 0.9,
+          zero_meta_yellow_max: clamp(warningN, 0, 999999),
+        }
+
+  return {
+    kpiTargetToStore: String(targetN),
+    kpiModeToStore: modeToStore,
+    settingsPayload: {
+      ...rules,
+      warning_margin: warningN,
+      value_type: valueType,
+      direction: modeToStore,
+    },
+  }
 }
 
 /**
@@ -225,15 +386,38 @@ export async function fetchControles(params?: { period?: string }) {
         FROM control_kpis ck
         GROUP BY ck.id_control
       ),
+      latest_reviews AS (
+        SELECT DISTINCT ON (sr.run_id)
+          sr.run_id::text AS run_id,
+          UPPER(
+            TRIM(
+              COALESCE(
+                sr.override_status::text,
+                CASE
+                  WHEN sr.review_status::text = 'APPROVED' THEN 'GREEN'
+                  WHEN sr.review_status::text = 'NEEDS_ADJUSTMENTS' THEN 'YELLOW'
+                  WHEN sr.review_status::text = 'REJECTED' THEN 'RED'
+                  ELSE NULL
+                END,
+                ''
+              )
+            )
+          ) AS grc_final_status
+        FROM security_reviews sr
+        ORDER BY sr.run_id, sr.is_latest DESC NULLS LAST, sr.reviewed_at DESC NULLS LAST, sr.created_at DESC NULLS LAST
+      ),
       runs_period AS (
         SELECT
           ck.id_control,
-          kr.status
+          kr.status,
+          COALESCE(lr.grc_final_status, '') AS grc_final_status
         FROM control_kpis ck
         LEFT JOIN kpi_runs kr
           ON kr.kpi_uuid = ck.kpi_uuid
           AND kr.period = ${period}
           AND kr.is_latest = TRUE
+        LEFT JOIN latest_reviews lr
+          ON lr.run_id = kr.id::text
       ),
       agg AS (
         SELECT
@@ -241,7 +425,11 @@ export async function fetchControles(params?: { period?: string }) {
           COUNT(rp.status)::int AS exec_done,
           COUNT(*) FILTER (WHERE rp.status = 'GREEN')::int AS green_count,
           COUNT(*) FILTER (WHERE rp.status = 'YELLOW')::int AS yellow_count,
-          COUNT(*) FILTER (WHERE rp.status = 'RED')::int AS red_count
+          COUNT(*) FILTER (WHERE rp.status = 'RED')::int AS red_count,
+          COUNT(*) FILTER (WHERE rp.status IS NOT NULL AND COALESCE(rp.grc_final_status, '') = '')::int AS grc_pending_count,
+          COUNT(*) FILTER (WHERE rp.grc_final_status = 'GREEN')::int AS grc_green_count,
+          COUNT(*) FILTER (WHERE rp.grc_final_status = 'YELLOW')::int AS grc_yellow_count,
+          COUNT(*) FILTER (WHERE rp.grc_final_status = 'RED')::int AS grc_red_count
         FROM runs_period rp
         GROUP BY rp.id_control
       )
@@ -253,6 +441,10 @@ export async function fetchControles(params?: { period?: string }) {
         COALESCE(a.green_count, 0) AS green_count,
         COALESCE(a.yellow_count, 0) AS yellow_count,
         COALESCE(a.red_count, 0) AS red_count,
+        COALESCE(a.grc_pending_count, 0) AS grc_pending_count,
+        COALESCE(a.grc_green_count, 0) AS grc_green_count,
+        COALESCE(a.grc_yellow_count, 0) AS grc_yellow_count,
+        COALESCE(a.grc_red_count, 0) AS grc_red_count,
 
         CASE
           -- ✅ Aplica "NÃO APLICÁVEL" quando o mês do período não é mês de execução para a frequência do controle
@@ -308,7 +500,58 @@ export async function fetchControles(params?: { period?: string }) {
           WHEN COALESCE(a.red_count, 0) > 0 THEN 'NÃO CONFORME'
           WHEN COALESCE(a.yellow_count, 0) > 0 THEN 'EM ATENÇÃO'
           ELSE 'CONFORME'
-        END AS status_final
+        END AS status_final,
+
+        CASE
+          WHEN (
+            (
+              COALESCE(c.frequency, '') ILIKE '%trim%'
+              OR COALESCE(c.frequency, '') ILIKE '%trime%'
+              OR COALESCE(c.frequency, '') ILIKE '%quarter%'
+              OR COALESCE(c.frequency, '') ILIKE '%trimestral%'
+              OR UPPER(TRIM(COALESCE(c.frequency, ''))) = 'QUARTERLY'
+              OR UPPER(TRIM(COALESCE(c.frequency, ''))) = 'QUARTER'
+            )
+            AND (SELECT m FROM period_ctx) NOT IN (1, 4, 7, 10)
+          ) THEN 'NÃO APLICÁVEL'
+
+          WHEN (
+            (
+              COALESCE(c.frequency, '') ILIKE '%semest%'
+              OR COALESCE(c.frequency, '') ILIKE '%semestral%'
+              OR COALESCE(c.frequency, '') ILIKE '%semi_annual%'
+              OR COALESCE(c.frequency, '') ILIKE '%semi-annual%'
+              OR COALESCE(c.frequency, '') ILIKE '%semiannual%'
+              OR UPPER(TRIM(COALESCE(c.frequency, ''))) IN ('SEMI_ANNUAL','SEMIANNUAL','SEMI-ANNUAL','SEMI')
+            )
+            AND (SELECT m FROM period_ctx) NOT IN (1, 7)
+          ) THEN 'NÃO APLICÁVEL'
+
+          WHEN (
+            (
+              (
+                COALESCE(c.frequency, '') ILIKE '%anual%'
+                OR COALESCE(c.frequency, '') ILIKE '%annual%'
+                OR COALESCE(c.frequency, '') ILIKE '%year%'
+                OR UPPER(TRIM(COALESCE(c.frequency, ''))) IN ('ANNUAL','YEARLY','YEAR')
+              )
+              AND UPPER(TRIM(COALESCE(c.frequency, ''))) NOT LIKE 'SEMI%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semi_annual%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semiannual%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semi-annual%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semest%'
+              AND COALESCE(c.frequency, '') NOT ILIKE '%semestral%'
+            )
+            AND (SELECT m FROM period_ctx) NOT IN (9, 10, 11, 12)
+          ) THEN 'NÃO APLICÁVEL'
+
+          WHEN COALESCE(a.exec_done, 0) = 0 THEN 'SEM EXECUÇÃO'
+          WHEN COALESCE(a.grc_red_count, 0) > 0 THEN 'NÃO CONFORME'
+          WHEN COALESCE(a.grc_yellow_count, 0) > 0 THEN 'EM ATENÇÃO'
+          WHEN COALESCE(a.grc_green_count, 0) = COALESCE(a.exec_done, 0) AND COALESCE(a.exec_done, 0) > 0 THEN 'CONFORME'
+          WHEN COALESCE(a.grc_pending_count, 0) > 0 THEN 'PENDENTE'
+          ELSE 'PENDENTE'
+        END AS grc_final_status
 
       FROM controls c
       LEFT JOIN kpi_total kt ON kt.id_control = c.id_control
@@ -677,6 +920,9 @@ export async function importarControles(controles: any[]) {
       byControl.get(row.id_control)!.push(row)
     }
 
+    const configWarnings: string[] = []
+    let configApplied = 0
+
     for (const [id_control, rows] of byControl.entries()) {
       const base = rows[0]
 
@@ -732,7 +978,18 @@ export async function importarControles(controles: any[]) {
         if (seen.has(row.kpi_id)) continue
         seen.add(row.kpi_id)
 
-        await sql`
+        const csvConfig = resolveCsvKpiConfig(row)
+        const modeFromCsv =
+          normalizeImportedMode(row.kpi_evaluation_mode) ??
+          normalizeImportedMode(row.kpi_direction) ??
+          normalizeImportedMode(row.kpi_goal_direction)
+        const modeToPersist = csvConfig.kpiModeToStore ?? modeFromCsv ?? null
+
+        if (csvConfig.warning) {
+          configWarnings.push(`[${row.id_control} / ${row.kpi_id}] ${csvConfig.warning}`)
+        }
+
+        const upserted = await sql`
           INSERT INTO control_kpis (
             id_control,
             kpi_uuid,
@@ -741,6 +998,7 @@ export async function importarControles(controles: any[]) {
             kpi_description,
             kpi_type,
             kpi_target,
+            kpi_evaluation_mode,
             reference_month
           ) VALUES (
             ${row.id_control},
@@ -749,7 +1007,8 @@ export async function importarControles(controles: any[]) {
             ${row.kpi_name || null},
             ${row.kpi_description || null},
             ${row.kpi_type || null},
-            ${row.kpi_target || null},
+            ${csvConfig.kpiTargetToStore ?? row.kpi_target ?? null},
+            ${modeToPersist},
             ${row.reference_month || null}
           )
           ON CONFLICT (id_control, kpi_id) DO UPDATE SET
@@ -758,9 +1017,24 @@ export async function importarControles(controles: any[]) {
             kpi_description = EXCLUDED.kpi_description,
             kpi_type = EXCLUDED.kpi_type,
             kpi_target = EXCLUDED.kpi_target,
+            kpi_evaluation_mode = COALESCE(EXCLUDED.kpi_evaluation_mode, control_kpis.kpi_evaluation_mode),
             reference_month = EXCLUDED.reference_month,
             updated_at = now()
+          RETURNING kpi_uuid::text AS kpi_uuid
         `
+
+        const kpiUuid = safeText(upserted?.[0]?.kpi_uuid)
+        if (kpiUuid && csvConfig.settingsPayload) {
+          const key = `kpi_rules:${kpiUuid}`
+          await sql`
+            INSERT INTO admin_settings (key, value_json, updated_at)
+            VALUES (${key}, ${JSON.stringify(csvConfig.settingsPayload)}::jsonb, now())
+            ON CONFLICT (key) DO UPDATE
+            SET value_json = EXCLUDED.value_json,
+                updated_at = now()
+          `
+          configApplied += 1
+        }
       }
 
       await sql`
@@ -774,10 +1048,17 @@ export async function importarControles(controles: any[]) {
 
     return {
       success: true as const,
-      warning:
+      warning: [
         invalidNoKpi.length > 0
           ? `Importação ok, mas ${invalidNoKpi.length} linha(s) foram ignoradas por estarem sem kpi_id (ex.: ${invalidNoKpi[0]?.id_control}).`
-          : undefined,
+          : null,
+        configWarnings.length > 0
+          ? `${configWarnings.length} configuração(ões) de meta foram ignoradas por inconsistência no CSV. Exemplo: ${configWarnings[0]}`
+          : null,
+        configApplied > 0 ? `${configApplied} KPI(s) tiveram regra individual de meta aplicada via CSV.` : null,
+      ]
+        .filter(Boolean)
+        .join(" | ") || undefined,
     }
   } catch (error: any) {
     console.error("Erro ao importar controles:", error)

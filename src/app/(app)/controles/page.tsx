@@ -44,6 +44,7 @@ interface Controle {
   yellow_count: number
   red_count: number
   status_final: "EM ABERTO" | "CONFORME" | "EM ATENÇÃO" | "NÃO CONFORME" | "NÃO APLICÁVEL" | string
+  grc_final_status: "GREEN" | "YELLOW" | "RED" | "PENDENTE" | "SEM EXECUÇÃO" | "NÃO APLICÁVEL" | string
 }
 
 /** helpers mês */
@@ -243,6 +244,7 @@ export default function ControlesPage() {
               yellow_count: Number(item.yellow_count || 0),
               red_count: Number(item.red_count || 0),
               status_final: String(item.status_final || "EM ABERTO"),
+              grc_final_status: String(item.grc_final_status || "PENDENTE"),
             }
           })
           setControles(mappedData)
@@ -347,22 +349,44 @@ export default function ControlesPage() {
     return "bg-slate-50 text-slate-600 border-slate-100"
   }
 
+  const normalizeControlStatusLabel = (s: string) => {
+    const up = safeText(s).toUpperCase()
+    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return "Não aplicável"
+    if (up.includes("EM ABERTO") || up.includes("PENDENTE") || up.includes("SEM EXEC")) return "Pendente"
+    if (up.includes("CONFORME") && !up.includes("NÃO") && !up.includes("NAO")) return "Conforme"
+    if (up.includes("NÃO CONFORME") || up.includes("NAO CONFORME") || up === "RED") return "Não conforme"
+    if (up.includes("ATEN") || up === "YELLOW") return "Em atenção"
+    return "Em atenção"
+  }
+
   const getFinalStatusStyle = (s: string) => {
-    const up = (s || "").toUpperCase()
-    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return { text: "text-slate-400", dot: "bg-slate-300" }
-    if (up.includes("CONFORME") && !up.includes("NÃO")) return { text: "text-emerald-600", dot: "bg-emerald-500" }
-    if (up.includes("NÃO")) return { text: "text-red-600", dot: "bg-red-500" }
-    if (up.includes("ATEN")) return { text: "text-amber-600", dot: "bg-amber-500" }
+    const label = normalizeControlStatusLabel(s)
+    if (label === "Conforme") return { text: "text-emerald-600", dot: "bg-emerald-500" }
+    if (label === "Não conforme") return { text: "text-red-600", dot: "bg-red-500" }
+    if (label === "Pendente") return { text: "text-slate-600", dot: "bg-slate-400" }
+    if (label === "Não aplicável") return { text: "text-slate-500", dot: "bg-slate-300" }
     return { text: "text-amber-600", dot: "bg-amber-500" }
   }
 
   const pickStatusIcon = (s: string) => {
-    const up = (s || "").toUpperCase()
-    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return <Clock size={12} className="text-slate-300" />
-    if (up.includes("CONFORME") && !up.includes("NÃO")) return <CheckCircle2 size={12} className="text-emerald-500" />
-    if (up.includes("NÃO")) return <AlertTriangle size={12} className="text-red-500" />
-    if (up.includes("ATEN")) return <AlertTriangle size={12} className="text-amber-500" />
+    const label = normalizeControlStatusLabel(s)
+    if (label === "Conforme") return <CheckCircle2 size={12} className="text-emerald-500" />
+    if (label === "Não conforme") return <AlertTriangle size={12} className="text-red-500" />
+    if (label === "Pendente" || label === "Não aplicável") return <Clock size={12} className="text-slate-500" />
     return <Clock size={12} className="text-amber-500" />
+  }
+
+  const getGrcStatusStyle = (s: string) => {
+    const up = safeText(s).toUpperCase()
+    if (up === "GREEN") return "bg-emerald-50 text-emerald-700 border-emerald-100"
+    if (up === "CONFORME") return "bg-emerald-50 text-emerald-700 border-emerald-100"
+    if (up === "YELLOW") return "bg-amber-50 text-amber-700 border-amber-100"
+    if (up.includes("ATEN")) return "bg-amber-50 text-amber-700 border-amber-100"
+    if (up === "RED") return "bg-red-50 text-red-700 border-red-100"
+    if (up.includes("NÃO CONFORME") || up.includes("NAO CONFORME")) return "bg-red-50 text-red-700 border-red-100"
+    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return "bg-slate-50 text-slate-500 border-slate-200"
+    if (up.includes("SEM EXEC")) return "bg-slate-50 text-slate-500 border-slate-200"
+    return "bg-[#f71866]/5 text-[#f71866] border-[#f71866]/20"
   }
 
   // ✅ query atual para propagar no "Detalhes" (isso é o que vai permitir o breadcrumb manter filtros)
@@ -384,7 +408,7 @@ export default function ControlesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Listagem de Controles</h1>
           <p className="text-slate-500 mt-1 font-medium text-sm">
-            Gestão de conformidade baseada na coluna owner_name.
+            Acompanhe status, responsáveis e evidências dos controles em um só lugar.
           </p>
         </div>
         <button
@@ -394,6 +418,27 @@ export default function ControlesPage() {
           <Plus className="h-5 w-5" /> Novo Controle
         </button>
       </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+        <StatSmallCard
+          icon={<ShieldCheck className="text-emerald-500" />}
+          label="Controles Finalizados"
+          value={filteredData.filter((d) => d.displayStatus === "Finalizado").length.toString()}
+          bgColor="bg-emerald-50"
+        />
+        <StatSmallCard
+          icon={<Clock className="text-[#f71866]" />}
+          label="Aguardando KPIs"
+          value={filteredData.filter((d) => d.displayStatus === "Em Aberto").length.toString()}
+          bgColor="bg-red-50"
+        />
+        <StatSmallCard
+          icon={<AlertTriangle className="text-amber-500" />}
+          label="Risco Crítico"
+          value={filteredData.filter((d) => (d.risco || "").toLowerCase().includes("crit")).length.toString()}
+          bgColor="bg-amber-50"
+        />
+      </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-center">
@@ -537,6 +582,9 @@ export default function ControlesPage() {
                       Status
                     </th>
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+                      Avaliação GRC
+                    </th>
+                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
                       Risco
                     </th>
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
@@ -548,6 +596,7 @@ export default function ControlesPage() {
                   {paginatedControles.length > 0 ? (
                     paginatedControles.map((item) => {
                       const st = getFinalStatusStyle(item.status_final)
+                      const normalizedStatus = normalizeControlStatusLabel(item.status_final)
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/30 transition-colors group">
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -591,7 +640,7 @@ export default function ControlesPage() {
                             <div className="flex flex-col items-center justify-center">
                               <div className="flex items-center justify-center gap-1.5">
                                 {pickStatusIcon(item.status_final)}
-                                <span className={`text-[11px] font-bold ${st.text}`}>{item.status_final}</span>
+                                <span className={`text-[11px] font-bold ${st.text}`}>{normalizedStatus}</span>
                               </div>
 
                               <div className="mt-1 flex items-center gap-2 text-[10px] font-bold text-slate-400">
@@ -618,6 +667,14 @@ export default function ControlesPage() {
                           </td>
 
                           <td className="px-6 py-4 text-center">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getGrcStatusStyle(item.grc_final_status)}`}
+                            >
+                              {item.grc_final_status || "PENDENTE"}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-4 text-center">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getRiskStyles(item.risco)}`}>
                               {item.risco}
                             </span>
@@ -639,7 +696,7 @@ export default function ControlesPage() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={8} className="px-6 py-20 text-center text-slate-400 text-sm">
+                      <td colSpan={9} className="px-6 py-20 text-center text-slate-400 text-sm">
                         Nenhum controle encontrado para os critérios selecionados.
                       </td>
                     </tr>
@@ -677,27 +734,6 @@ export default function ControlesPage() {
             </div>
           </>
         )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-        <StatSmallCard
-          icon={<ShieldCheck className="text-emerald-500" />}
-          label="Controles Finalizados"
-          value={processedData.filter((d) => d.displayStatus === "Finalizado").length.toString()}
-          bgColor="bg-emerald-50"
-        />
-        <StatSmallCard
-          icon={<Clock className="text-[#f71866]" />}
-          label="Aguardando KPIs"
-          value={processedData.filter((d) => d.displayStatus === "Em Aberto").length.toString()}
-          bgColor="bg-red-50"
-        />
-        <StatSmallCard
-          icon={<AlertTriangle className="text-amber-500" />}
-          label="Risco Crítico"
-          value={processedData.filter((d) => (d.risco || "").toLowerCase().includes("crit")).length.toString()}
-          bgColor="bg-amber-50"
-        />
       </div>
 
       {isNewControlModalOpen && (

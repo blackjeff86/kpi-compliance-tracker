@@ -2,7 +2,8 @@
 
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Shield, Mail, Lock, Eye, EyeOff } from "lucide-react"
+import Image from "next/image"
+import { Mail, Lock, Eye, EyeOff } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -10,12 +11,20 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
+  function persistUserSessionEmail(rawEmail?: string) {
+    if (typeof window === "undefined") return
+    const normalized = String(rawEmail || "").trim().toLowerCase()
+    const finalEmail = normalized || "guest@kpi.local"
+    window.localStorage.setItem("kpi_user_email", finalEmail)
+  }
+
   // Esta função agora apenas ignora os dados e pula para o dashboard
   function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     
     // Log apenas para você ver no console do navegador que o clique funcionou
     console.log("Tentativa de login ignorada. Redirecionando...")
+    persistUserSessionEmail(email)
     
     // Redireciona para o grupo (app) na rota /dashboard
     router.push("/dashboard")
@@ -26,12 +35,11 @@ export default function LoginPage() {
       {/* Painel Esquerdo - Branding VTEX Style */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-[#f71963] p-12">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20">
-            <Shield className="h-5 w-5 text-white" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/20">
+            <Image src="/logo-v2.png" alt="Logo" width={58} height={58} className="object-contain" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">KPI Compliance</h1>
-            <p className="text-[10px] uppercase tracking-widest text-white/70">Tracker</p>
+            <h1 className="text-2xl font-bold text-white tracking-tight">KPIs Management</h1>
           </div>
         </div>
 
@@ -54,35 +62,14 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f71963]">
-              <Shield className="h-5 w-5 text-white" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#f71963]">
+              <Image src="/logo-v2.png" alt="Logo" width={58} height={58} className="object-contain" />
             </div>
-            <h1 className="text-lg font-bold text-slate-900">KPI Compliance</h1>
+            <h1 className="text-2xl font-bold text-slate-900">KPIs Management</h1>
           </div>
 
           <div className="mb-8 text-center lg:text-left">
             <h2 className="text-2xl font-bold text-slate-900">Entrar na plataforma</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Acesso temporário liberado para testes.
-            </p>
-          </div>
-
-          {/* Botão de Bypass (Acesso Rápido) */}
-          <button
-            type="button"
-            className="flex w-full h-12 items-center justify-center gap-3 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all mb-4"
-            onClick={() => router.push("/dashboard")}
-          >
-             Entrar como Convidado
-          </button>
-
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-slate-200" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-slate-400">ou preencha abaixo</span>
-            </div>
           </div>
 
           {/* Formulário que também redireciona sem validar */}

@@ -25,7 +25,7 @@ import {
   Save,
 } from "lucide-react"
 import { fetchControleByCode } from "../actions"
-import { fetchLatestKpiStatuses, createControlKpi } from "./actions"
+import { fetchLatestKpiStatuses, fetchLatestKpiRunDetails, createControlKpi, updateControlTechnicalDetails } from "./actions"
 
 type TabKey = "kpis" | "history" | "actions"
 
@@ -63,10 +63,17 @@ function toNumberOrNull(v: any) {
   return null
 }
 
-function formatPercent(n: number) {
-  const isInt = Math.abs(n - Math.round(n)) < 1e-9
-  const value = isInt ? String(Math.round(n)) : n.toFixed(1)
-  return `${value}%`
+function extractKpiCodeFromText(...values: any[]) {
+  const text = values.map((v) => safeText(v)).join(" ")
+  if (!text) return ""
+
+  // Ex.: "KPI ID 03", "KPI 03", "kpi id 166"
+  const m = text.match(/\bKPI(?:\s*ID)?\s*([A-Z0-9-]+)\b/i)
+  if (!m) return ""
+
+  const codePart = safeText(m[1])
+  if (!codePart) return ""
+  return `KPI ID ${codePart}`
 }
 
 // URL: YYYY-MM (ex.: 2026-01)
@@ -173,6 +180,9 @@ export default function DetalheControlePage() {
   const [loading, setLoading] = useState(true)
 
   const [kpiRunStatusByUuid, setKpiRunStatusByUuid] = useState<Record<string, string>>({})
+  const [kpiRunDetailsByUuid, setKpiRunDetailsByUuid] = useState<
+    Record<string, { measured_value: string; status: string; kpi_code: string }>
+  >({})
 
   const [isNewKpiModalOpen, setIsNewKpiModalOpen] = useState(false)
   const [savingNewKpi, setSavingNewKpi] = useState(false)
@@ -181,6 +191,18 @@ export default function DetalheControlePage() {
     kpi_description: "",
     kpi_type: "",
     kpi_target: "",
+  })
+  const [isEditTechnicalModalOpen, setIsEditTechnicalModalOpen] = useState(false)
+  const [savingTechnicalDetails, setSavingTechnicalDetails] = useState(false)
+  const [technicalForm, setTechnicalForm] = useState({
+    id_control: "",
+    framework: "",
+    description_control: "",
+    goal_control: "",
+    risk_title: "",
+    risk_id: "",
+    risk_name: "",
+    risk_description: "",
   })
 
   useEffect(() => {
@@ -245,27 +267,46 @@ export default function DetalheControlePage() {
 
   // ✅ agora busca status POR PERÍODO também
   useEffect(() => {
-    async function loadStatuses() {
+    async function loadStatusesAndRuns() {
       const uuids: string[] = kpisList
         .map((k: KpiCardItem) => k.kpi_uuid)
         .filter((u: string): u is string => isUuidLike(u))
 
       if (uuids.length === 0) {
         setKpiRunStatusByUuid({})
+        setKpiRunDetailsByUuid({})
         return
       }
 
-      const res = await fetchLatestKpiStatuses(uuids, periodoISO)
-      if (res?.success && res.data) setKpiRunStatusByUuid(res.data)
+      const [statusRes, runRes] = await Promise.all([
+        fetchLatestKpiStatuses(uuids, periodoISO),
+        fetchLatestKpiRunDetails(uuids, periodoISO),
+      ])
+
+      if (statusRes?.success && statusRes.data) setKpiRunStatusByUuid(statusRes.data)
       else setKpiRunStatusByUuid({})
+
+      if (runRes?.success && runRes.data) setKpiRunDetailsByUuid(runRes.data)
+      else setKpiRunDetailsByUuid({})
     }
 
-    loadStatuses()
+    loadStatusesAndRuns()
   }, [kpisList, periodoISO])
 
+  const currentControlId = safeText(infoGeral?.id_control) || safeText(id)
+
   const onEditarDetalhesTecnicos = () => {
-    const qs = buildQueryWithPeriodo(periodoISO)
-    router.push(`/controles/editar/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`)
+    setTechnicalForm({
+      id_control: currentControlId,
+      framework: safeText(infoGeral?.framework),
+      description_control: safeText(infoGeral?.description_control),
+      goal_control: safeText(infoGeral?.goal_control),
+      risk_title: safeText(infoGeral?.risk_title),
+      risk_id: safeText(infoGeral?.risk_id),
+      risk_name: safeText(infoGeral?.risk_name),
+      risk_description: safeText(infoGeral?.risk_description),
+    })
+    setIsEditTechnicalModalOpen(true)
   }
 
   const irParaExecucao = (kpiUuid: string) => {
@@ -308,7 +349,7 @@ export default function DetalheControlePage() {
       setSavingNewKpi(true)
 
       const res = await createControlKpi({
-        id_control: id,
+        id_control: currentControlId,
         kpi_name: safeText(newKpi.kpi_name),
         kpi_description: safeText(newKpi.kpi_description) || null,
         kpi_type: safeText(newKpi.kpi_type),
@@ -351,6 +392,65 @@ export default function DetalheControlePage() {
     }
   }
 
+  const validateTechnicalDetails = () => {
+    if (!safeText(technicalForm.id_control)) return "Preencha o ID do controle."
+    return ""
+  }
+
+  const onSaveTechnicalDetails = async () => {
+    const err = validateTechnicalDetails()
+    if (err) {
+      alert(err)
+      return
+    }
+
+    try {
+      setSavingTechnicalDetails(true)
+
+      const res = await updateControlTechnicalDetails({
+        current_id_control: currentControlId,
+        id_control: safeText(technicalForm.id_control),
+        framework: safeText(technicalForm.framework) || null,
+        description_control: safeText(technicalForm.description_control) || null,
+        goal_control: safeText(technicalForm.goal_control) || null,
+        risk_title: safeText(technicalForm.risk_title) || null,
+        risk_id: safeText(technicalForm.risk_id) || null,
+        risk_name: safeText(technicalForm.risk_name) || null,
+        risk_description: safeText(technicalForm.risk_description) || null,
+      })
+
+      if (!res?.success) {
+        alert(res?.error || "Falha ao salvar detalhes técnicos.")
+        return
+      }
+
+      const nextId = safeText(res?.data?.id_control) || safeText(technicalForm.id_control)
+
+      setData((prev: any) => ({
+        ...prev,
+        id_control: nextId,
+        framework: res?.data?.framework ?? null,
+        description_control: res?.data?.description_control ?? null,
+        goal_control: res?.data?.goal_control ?? null,
+        risk_title: res?.data?.risk_title ?? null,
+        risk_id: res?.data?.risk_id ?? null,
+        risk_name: res?.data?.risk_name ?? null,
+        risk_description: res?.data?.risk_description ?? null,
+      }))
+
+      setIsEditTechnicalModalOpen(false)
+
+      if (nextId && nextId !== currentControlId) {
+        const qs = buildQueryWithPeriodo(periodoISO)
+        router.replace(`/controles/${encodeURIComponent(nextId)}${qs ? `?${qs}` : ""}`)
+      }
+    } catch {
+      alert("Falha ao salvar detalhes técnicos.")
+    } finally {
+      setSavingTechnicalDetails(false)
+    }
+  }
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center">
@@ -367,12 +467,12 @@ export default function DetalheControlePage() {
               Controles
             </Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="text-slate-600 font-medium">{id}</span>
+            <span className="text-slate-600 font-medium">{currentControlId || id}</span>
           </nav>
 
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              {id} - {infoGeral?.name_control || "Controle não encontrado"}
+              {currentControlId} - {infoGeral?.name_control || "Controle não encontrado"}
             </h1>
 
             <span
@@ -527,16 +627,73 @@ export default function DetalheControlePage() {
               {activeTab === "actions" && (
                 <div className="space-y-3 min-h-[200px]">
                   {infoGeral?.planos?.length > 0 ? (
-                    infoGeral.planos.map((p: any) => (
-                      <KPIItem
-                        key={p.id}
-                        title={p.title}
-                        desc={p.description}
-                        value={p.status}
-                        meta={`Prazo: ${new Date(p.due_date).toLocaleDateString("pt-BR")}`}
-                        status="warning"
-                      />
-                    ))
+                    infoGeral.planos.map((p: any) => {
+                      const planoId = safeText(p?.id || p?.plan_id || "")
+                      const parsedKpiCode = extractKpiCodeFromText(p?.kpi_id, p?.kpi_code, p?.title, p?.description)
+                      const planoKpiId = safeText(p?.kpi_id || p?.kpi_code || parsedKpiCode || "")
+                      const planoKpiUuid = safeText(p?.kpi_uuid || "")
+
+                      const relatedKpi = kpisList.find(
+                        (k) =>
+                          (planoKpiUuid && safeText(k.kpi_uuid) === planoKpiUuid) ||
+                          (planoKpiId && safeText(k.kpi_id_text) === planoKpiId)
+                      )
+
+                      const kpiNomeResolved = safeText(relatedKpi?.kpi_name || p?.kpi_name || "")
+                      const kpiTargetResolved = safeText(relatedKpi?.target || p?.kpi_target || "")
+                      const runDetailResolved =
+                        (planoKpiUuid ? kpiRunDetailsByUuid[planoKpiUuid] : undefined) ||
+                        (relatedKpi?.kpi_uuid ? kpiRunDetailsByUuid[relatedKpi.kpi_uuid] : undefined)
+
+                      const measuredFromRun = safeText(runDetailResolved?.measured_value || "")
+                      const kpiValueResolved =
+                        measuredFromRun
+                          ? measuredFromRun
+                          : relatedKpi?.executionValue !== null && relatedKpi?.executionValue !== undefined
+                          ? String(relatedKpi.executionValue)
+                          : safeText(p?.kpi_value || p?.kpi_actual || "")
+
+                      const dueDateLabel =
+                        p?.due_date
+                          ? new Date(p.due_date).toLocaleDateString("pt-BR")
+                          : "N/A"
+
+                      const fallbackSlug = `PA-${safeText(id)}-${safeText(p?.title || "plano")
+                        .replace(/\s+/g, "-")
+                        .replace(/[^a-zA-Z0-9-_]/g, "")
+                        .toUpperCase()
+                        .slice(0, 24)}`
+                      const planoSlug = planoId || fallbackSlug
+
+                      const planoQuery = new URLSearchParams({
+                        title: safeText(p?.title || ""),
+                        description: safeText(p?.description || ""),
+                        status: safeText(p?.status || ""),
+                        due_date: safeText(p?.due_date || ""),
+                        responsavel: safeText(p?.responsavel || p?.responsible || infoGeral?.owner_name || ""),
+                        controle_id: safeText(id),
+                        controle_nome: safeText(infoGeral?.name_control || ""),
+                        kpi_nome: kpiNomeResolved,
+                        kpi_valor: kpiValueResolved,
+                        kpi_target: kpiTargetResolved,
+                      }).toString()
+
+                      return (
+                        <Link
+                          key={planoSlug}
+                          href={`/planos/${encodeURIComponent(planoSlug)}${planoQuery ? `?${planoQuery}` : ""}`}
+                          className="block"
+                        >
+                          <KPIItem
+                            title={p.title}
+                            desc={p.description}
+                            value={p.status}
+                            meta={`Prazo: ${dueDateLabel}`}
+                            status="warning"
+                          />
+                        </Link>
+                      )
+                    })
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center p-10 border border-dashed border-slate-200 rounded-xl text-slate-400 gap-2">
                       <ClipboardCheck size={32} strokeWidth={1} />
@@ -569,7 +726,7 @@ export default function DetalheControlePage() {
             <div className="p-4 space-y-4">
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">ID do Controle</span>
-                <p className="text-xs font-bold text-slate-700">{id}</p>
+                <p className="text-xs font-bold text-slate-700">{currentControlId || "N/A"}</p>
               </div>
 
               <div>
@@ -635,6 +792,130 @@ export default function DetalheControlePage() {
         </aside>
       </div>
 
+      {isEditTechnicalModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => {
+              if (savingTechnicalDetails) return
+              setIsEditTechnicalModalOpen(false)
+            }}
+          />
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl relative z-10 overflow-hidden">
+            <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Editar Detalhes Técnicos</h3>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  Atualize os dados técnicos do controle <span className="font-mono font-bold">{currentControlId}</span>
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  if (savingTechnicalDetails) return
+                  setIsEditTechnicalModalOpen(false)
+                }}
+                className="p-2 rounded-full border border-slate-100 text-slate-400 hover:text-[#f71866] hover:bg-[#f71866]/5 transition-all"
+                title="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field
+                  label="ID do controle"
+                  placeholder="Ex.: CYB_C01"
+                  value={technicalForm.id_control}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, id_control: v }))}
+                />
+                <Field
+                  label="Framework"
+                  placeholder="Ex.: SOX"
+                  value={technicalForm.framework}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, framework: v }))}
+                />
+              </div>
+
+              <Field
+                label="Descrição do controle"
+                placeholder="Descreva o controle"
+                value={technicalForm.description_control}
+                onChange={(v: string) => setTechnicalForm((p) => ({ ...p, description_control: v }))}
+                textarea
+              />
+
+              <Field
+                label="Objetivo"
+                placeholder="Descreva o objetivo"
+                value={technicalForm.goal_control}
+                onChange={(v: string) => setTechnicalForm((p) => ({ ...p, goal_control: v }))}
+                textarea
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SelectField
+                  label="Classificação do risco"
+                  value={technicalForm.risk_title}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, risk_title: v }))}
+                  options={[
+                    { value: "", label: "Selecione" },
+                    { value: "LOW", label: "LOW" },
+                    { value: "MEDIUM", label: "MEDIUM" },
+                    { value: "HIGH", label: "HIGH" },
+                    { value: "CRITICAL", label: "CRITICAL" },
+                  ]}
+                />
+                <Field
+                  label="ID do risco"
+                  placeholder="Ex.: RISK-123"
+                  value={technicalForm.risk_id}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, risk_id: v }))}
+                />
+                <Field
+                  label="Nome do risco"
+                  placeholder="Ex.: Interrupção de serviço"
+                  value={technicalForm.risk_name}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, risk_name: v }))}
+                />
+              </div>
+
+              <Field
+                label="Descrição do risco"
+                placeholder="Descreva o risco"
+                value={technicalForm.risk_description}
+                onChange={(v: string) => setTechnicalForm((p) => ({ ...p, risk_description: v }))}
+                textarea
+              />
+            </div>
+
+            <div className="p-4 bg-slate-50 flex items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  if (savingTechnicalDetails) return
+                  setIsEditTechnicalModalOpen(false)
+                }}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={onSaveTechnicalDetails}
+                disabled={savingTechnicalDetails}
+                className={`px-5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-all ${
+                  savingTechnicalDetails ? "bg-slate-300 text-white" : "bg-[#f71866] hover:bg-[#d61556] text-white"
+                }`}
+              >
+                {savingTechnicalDetails ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                Salvar alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isNewKpiModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -650,7 +931,7 @@ export default function DetalheControlePage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Adicionar KPI</h3>
                 <p className="text-xs text-slate-500 mt-1 font-medium">
-                  Esse KPI será vinculado ao controle <span className="font-mono font-bold">{id}</span>
+                  Esse KPI será vinculado ao controle <span className="font-mono font-bold">{currentControlId}</span>
                 </p>
               </div>
 
@@ -822,6 +1103,25 @@ function Field({ label, value, onChange, placeholder, textarea }: any) {
           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#f71866]/10 focus:border-[#f71866]"
         />
       )}
+    </div>
+  )
+}
+
+function SelectField({ label, value, onChange, options }: any) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#f71866]/10 focus:border-[#f71866]"
+      >
+        {(options || []).map((opt: any) => (
+          <option key={String(opt.value)} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

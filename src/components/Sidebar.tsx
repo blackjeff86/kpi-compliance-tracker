@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { 
@@ -9,7 +10,6 @@ import {
   ClipboardList, 
   Settings,
   LogOut,
-  Shield,
   ClipboardCheck
 } from "lucide-react"
 
@@ -28,12 +28,11 @@ export default function Sidebar() {
     <aside className="w-64 bg-white border-r border-slate-100 flex flex-col h-screen sticky top-0">
       {/* LOGO AREA */}
       <div className="p-8 flex items-center gap-3">
-        <div className="h-8 w-8 bg-[#f71963] rounded-lg flex items-center justify-center shadow-lg shadow-[#f71963]/20">
-          <Shield className="text-white h-5 w-5" />
+        <div className="h-12 w-12 bg-[#f71963] rounded-lg flex items-center justify-center shadow-lg shadow-[#f71963]/20">
+          <Image src="/logo-v2.png" alt="Logo" width={46} height={46} className="object-contain" />
         </div>
         <div>
-          <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-none">COMPLIANCE</h1>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Tracker</p>
+          <h1 className="text-sm font-bold text-slate-900 tracking-tight leading-none">KPIs Management</h1>
         </div>
       </div>
 

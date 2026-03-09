@@ -20,6 +20,49 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Configuração de Upload de Evidências (Google Drive)
+
+### 1) Variáveis de ambiente
+
+Use o arquivo `.env.example` como base e crie/atualize seu `.env`.
+
+Opção recomendada (JSON completo da service account em 1 variável):
+
+```env
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","token_uri":"https://oauth2.googleapis.com/token"}
+```
+
+Alternativa (campos separados):
+
+```env
+GOOGLE_DRIVE_CLIENT_EMAIL=service-account@seu-projeto.iam.gserviceaccount.com
+GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+### 2) Compartilhar pasta raiz no Google Drive
+
+1. Crie (ou escolha) a pasta raiz de evidências no Drive.
+2. Compartilhe essa pasta com o e-mail da service account (`client_email`) com permissão de edição.
+3. Copie o ID da pasta na URL do Google Drive.
+
+### 3) Configurar no sistema (Admin)
+
+1. Acesse `Admin > Configurações`.
+2. Aba `Upload de Evidências`.
+3. Habilite o upload.
+4. Informe o `ID da Pasta Raiz no Google Drive`.
+5. Salve.
+
+### 4) Comportamento automático no registro de execução
+
+Ao clicar em `Finalizar Registro` com evidência anexada, o sistema:
+
+1. Cria/reutiliza pastas em `Mês de Referência / Controle / KPI`.
+2. Faz upload do arquivo para a pasta do KPI.
+3. Salva o link do arquivo no campo `evidence_link` em `kpi_runs`.
+
+Observação: o sistema evita duplicar pastas, reaproveitando as já existentes.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -4,6 +4,17 @@ import { neon } from "@neondatabase/serverless"
 
 const sql = neon(process.env.DATABASE_URL!)
 
+async function ensureGrcReviewColumns() {
+  try {
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_final_status text`
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_review_comment text`
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_reviewed_at timestamptz`
+    await sql`ALTER TABLE kpi_runs ADD COLUMN IF NOT EXISTS grc_reviewed_by_email text`
+  } catch (error) {
+    console.warn("Não foi possível garantir colunas de revisão GRC em kpi_runs:", error)
+  }
+}
+
 function safeText(v: any) {
   if (v === null || v === undefined) return null
   const s = String(v).trim()
@@ -117,6 +128,28 @@ function computeKpiStatusUniversal(params: {
 function isUuidLike(v: any) {
   const s = String(v || "").trim()
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
+
+async function ensureActionPlansKpiRunIdColumn() {
+  try {
+    await sql`
+      ALTER TABLE action_plans
+      ADD COLUMN IF NOT EXISTS kpi_run_id text
+    `
+  } catch (error) {
+    console.warn("Não foi possível garantir action_plans.kpi_run_id:", error)
+  }
+}
+
+function getKpiRunPrimaryId(row: any) {
+  if (!row) return ""
+  const candidates = ["id", "run_id", "kpi_run_id"]
+  for (const key of candidates) {
+    const raw = row[key]
+    const val = raw === null || raw === undefined ? "" : String(raw).trim()
+    if (val) return val
+  }
+  return ""
 }
 
 async function fetchRulesForKpi(kpiUuid: string | null): Promise<{ rules: AdminKpiRules; warning?: string }> {
@@ -249,8 +282,17 @@ export async function saveKpiExecution(payload: {
   executor_comment: string | null
   evidence_link: string | null
   created_by_email?: string | null
+  action_plan?: {
+    description: string
+    responsible: string
+    due_date: string
+    criticality: string
+  } | null
 }) {
   try {
+    await ensureActionPlansKpiRunIdColumn()
+    await ensureGrcReviewColumns()
+
     const id_control = safeText(payload.id_control)
     const kpi_ref = safeText(payload.kpi_id)
     const period = safeText(payload.period)
@@ -308,6 +350,22 @@ export async function saveKpiExecution(payload: {
       rules,
     })
 
+    const actionPlan = payload.action_plan || null
+    if (status === "RED") {
+      const description = safeText(actionPlan?.description)
+      const responsible = safeText(actionPlan?.responsible)
+      const due_date = safeText(actionPlan?.due_date)
+      const criticality = safeText(actionPlan?.criticality)
+
+      if (!description || !responsible || !due_date || !criticality) {
+        return {
+          success: false,
+          error:
+            "Para finalizar um registro crítico, preencha o Plano de Ação (descrição, responsável, data limite e criticidade).",
+        }
+      }
+    }
+
     const createdBy = safeText(payload.created_by_email) || "system@grc.local"
 
     // 1) desmarca latest anterior
@@ -332,6 +390,10 @@ export async function saveKpiExecution(payload: {
         evidence_link,
         executor_comment,
         created_by_email,
+        grc_final_status,
+        grc_review_comment,
+        grc_reviewed_at,
+        grc_reviewed_by_email,
         is_latest,
         created_at,
         updated_at
@@ -345,12 +407,98 @@ export async function saveKpiExecution(payload: {
         ${safeText(payload.evidence_link)},
         ${safeText(payload.executor_comment)},
         ${createdBy},
+        NULL,
+        NULL,
+        NULL,
+        NULL,
         TRUE,
         now(),
         now()
       )
       RETURNING *
     `
+
+    if (status === "RED" && actionPlan) {
+      const description = safeText(actionPlan.description) as string
+      const responsible = safeText(actionPlan.responsible) as string
+      const due_date = safeText(actionPlan.due_date) as string
+      const criticality = safeText(actionPlan.criticality) as string
+      const title = `Plano para ${kpiCodeText || "KPI crítico"}`
+      const kpiRunId = getKpiRunPrimaryId(inserted?.[0])
+      const ownerText = responsible
+
+      // schema atual do banco (action_plans): owner + kpi_run_id
+      try {
+        await sql`
+          INSERT INTO action_plans (
+            id_control,
+            title,
+            description,
+            due_date,
+            status,
+            owner,
+            kpi_run_id,
+            created_at
+          ) VALUES (
+            ${id_control},
+            ${title},
+            ${description},
+            ${due_date},
+            'Aberto',
+            ${ownerText},
+            ${kpiRunId || null},
+            now()
+          )
+        `
+      } catch {
+        // fallback legado: mantém rastreabilidade no description
+        const descriptionWithMeta = `${description}
+
+Responsável: ${responsible}
+Criticidade: ${criticality}
+KPI: ${kpiCodeText || "N/A"}
+Período: ${period}
+KPI Run: ${kpiRunId || "N/A"}`
+
+        try {
+          await sql`
+            INSERT INTO action_plans (
+              id_control,
+              title,
+              description,
+              due_date,
+              status,
+              owner,
+              created_at
+            ) VALUES (
+              ${id_control},
+              ${title},
+              ${descriptionWithMeta},
+              ${due_date},
+              'Aberto',
+              ${ownerText},
+              now()
+            )
+          `
+        } catch {
+          await sql`
+            INSERT INTO action_plans (
+              id_control,
+              title,
+              description,
+              due_date,
+              status
+            ) VALUES (
+              ${id_control},
+              ${title},
+              ${descriptionWithMeta},
+              ${due_date},
+              'Aberto'
+            )
+          `
+        }
+      }
+    }
 
     return { success: true, data: inserted?.[0] || null }
   } catch (error: any) {

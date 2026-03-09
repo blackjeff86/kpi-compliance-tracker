@@ -208,6 +208,41 @@ function CadastroControleContent() {
       return "ON_DEMAND"
     }
 
+    const normalizeKpiValueType = (v: any, targetRaw: any) => {
+      const s = (v ?? "")
+        .toString()
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "_")
+      if (["BOOLEAN", "BOOL", "SIM_NAO", "SIM/NAO", "YES_NO", "YES/NO"].includes(s)) return "BOOLEAN"
+      if (["PERCENT", "PERCENTUAL", "PERCENTAGE", "%"].includes(s)) return "PERCENT"
+      if (["NUMBER", "NUMERIC", "NUMERAL", "NUMERO", "NÚMERO"].includes(s)) return "NUMBER"
+
+      const t = (targetRaw ?? "").toString().trim()
+      const tLow = t.toLowerCase()
+      if (["sim", "nao", "não", "true", "false", "yes", "no", "1", "0"].includes(tLow)) return "BOOLEAN"
+      if (t.includes("%")) return "PERCENT"
+      return "NUMBER"
+    }
+
+    const normalizeKpiDirection = (v: any, valueType: string) => {
+      if (valueType === "BOOLEAN") return "BOOLEAN"
+      const s = (v ?? "")
+        .toString()
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "_")
+      if (["DOWN", "LOWER_BETTER", "MENOR_MELHOR", "MENOR", "DESC"].includes(s)) return "DOWN"
+      return "UP"
+    }
+
+    const normalizeWarningMargin = (v: any) => {
+      const raw = (v ?? "").toString().trim()
+      if (!raw) return ""
+      const numeric = Number(raw.replace("%", "").replace(",", "."))
+      return Number.isFinite(numeric) ? String(numeric) : raw
+    }
+
     return data.map((row) => {
       let rTitle = row.risk_title?.toString().trim().toLowerCase() || ""
       if (["high", "alto", "crítico", "critical"].includes(rTitle)) rTitle = "CRITICAL"
@@ -221,7 +256,19 @@ function CadastroControleContent() {
       if (kType.includes("aut") || kType.includes("api")) kType = "Automated"
       else kType = "Manual"
 
-      return { ...row, risk_title: rTitle, frequency: freq, kpi_type: kType }
+      const kpiValueType = normalizeKpiValueType(row.kpi_value_type, row.kpi_target)
+      const kpiDirection = normalizeKpiDirection(row.kpi_direction || row.kpi_evaluation_mode, kpiValueType)
+      const kpiWarningMargin = normalizeWarningMargin(row.kpi_warning_margin)
+
+      return {
+        ...row,
+        risk_title: rTitle,
+        frequency: freq,
+        kpi_type: kType,
+        kpi_value_type: kpiValueType,
+        kpi_direction: kpiDirection,
+        kpi_warning_margin: kpiWarningMargin,
+      }
     })
   }
 
@@ -247,6 +294,9 @@ function CadastroControleContent() {
       "kpi_name",
       "kpi_type",
       "kpi_target",
+      "kpi_value_type",
+      "kpi_direction",
+      "kpi_warning_margin",
       "kpi_description",
       "status",
     ]
@@ -272,6 +322,9 @@ function CadastroControleContent() {
       "Log Success",
       "Automated",
       "100%",
+      "PERCENT",
+      "UP",
+      "5",
       "Descrição da métrica do KPI aqui",
       "Ativo",
     ]
@@ -281,7 +334,7 @@ function CadastroControleContent() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.setAttribute("href", url)
-    link.setAttribute("download", "modelo_controles_v4.csv")
+    link.setAttribute("download", "modelo_controles_v5.csv")
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -769,7 +822,7 @@ function CadastroControleContent() {
             </div>
             <h2 className="text-2xl font-bold text-slate-900 text-center">Importação em Massa</h2>
             <p className="text-slate-500 text-center mt-3 max-w-sm font-medium">
-              {dragActive ? "Pode soltar o arquivo!" : "Arraste seu CSV com as 22 colunas preenchidas ou use o seletor abaixo."}
+              {dragActive ? "Pode soltar o arquivo!" : "Arraste seu CSV com as 25 colunas preenchidas ou use o seletor abaixo."}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 mt-10 w-full justify-center">
@@ -781,7 +834,7 @@ function CadastroControleContent() {
                 onClick={baixarTemplateCSV}
                 className="flex items-center justify-center gap-2 px-8 py-3.5 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-50 transition-all active:scale-95"
               >
-                <Download size={18} /> Baixar Modelo (22 colunas)
+                <Download size={18} /> Baixar Modelo (25 colunas)
               </button>
             </div>
 
@@ -795,7 +848,7 @@ function CadastroControleContent() {
             <div className="mt-8 flex items-center gap-2 text-slate-400">
               <Info size={14} />
               <span className="text-[10px] font-bold uppercase tracking-wider">
-                O sistema aceita termos em Português ou Inglês para Risco, Frequência e Tipo de KPI
+                O sistema aceita termos em Português/Inglês para Risco, Frequência, Tipo de KPI e regras de meta
               </span>
             </div>
           </div>

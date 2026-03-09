@@ -4,7 +4,7 @@ import { Inter } from "next/font/google";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "KPI Compliance Tracker",
+  title: "KPIs Management",
   description: "Internal Governance System",
 };
 

@@ -117,12 +117,12 @@ function buildMonthOptions(startYear = 2025, endYear?: number) {
 function mapRunStatusToUi(statusRaw: any): { label: string; dot: string; text: string } {
   const s = String(statusRaw || "").trim().toUpperCase()
 
-  if (!s) return { label: "PEND.", dot: "bg-amber-500", text: "text-amber-600" }
-  if (s.includes("GREEN")) return { label: "Meta Atingida", dot: "bg-emerald-500", text: "text-emerald-600" }
-  if (s.includes("RED")) return { label: "Crítico", dot: "bg-red-500", text: "text-red-600" }
-  if (s.includes("YELLOW")) return { label: "Em Atenção", dot: "bg-amber-500", text: "text-amber-600" }
+  if (s.includes("GREEN")) return { label: "Green", dot: "bg-emerald-500", text: "text-emerald-600" }
+  if (s.includes("RED")) return { label: "Red", dot: "bg-red-500", text: "text-red-600" }
+  if (s.includes("YELLOW")) return { label: "Yellow", dot: "bg-amber-500", text: "text-amber-600" }
 
-  return { label: s, dot: "bg-amber-500", text: "text-amber-600" }
+  // fallback para manter a coluna restrita a Red/Yellow/Green
+  return { label: "Yellow", dot: "bg-amber-500", text: "text-amber-600" }
 }
 
 function clampPage(n: number) {
@@ -388,8 +388,8 @@ export default function KPIsPage() {
 
   const stats = useMemo(() => {
     const total = filteredKPIs.length
-    const atingidas = filteredKPIs.filter((k) => k.status === "Meta Atingida").length
-    const abaixo = filteredKPIs.filter((k) => k.status !== "Meta Atingida").length
+    const atingidas = filteredKPIs.filter((k) => k.status === "Green").length
+    const abaixo = filteredKPIs.filter((k) => k.status !== "Green").length
     const perc = total > 0 ? Math.round((atingidas / total) * 100) : 0
 
     const perf = filteredKPIs.reduce((acc, k) => {
@@ -430,6 +430,12 @@ export default function KPIsPage() {
           Novo Indicador
         </button>
       </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+        <StatSmallCard icon={<Target className="text-emerald-500" />} label="Metas Atingidas" value={`${stats.perc}%`} bgColor="bg-emerald-50" />
+        <StatSmallCard icon={<TrendingUp className="text-[#f71866]" />} label="Performance Global" value={stats.perfLabel} bgColor="bg-red-50" />
+        <StatSmallCard icon={<AlertCircle className="text-amber-500" />} label="Abaixo da Meta" value={String(stats.abaixo).padStart(2, "0")} bgColor="bg-amber-50" />
+      </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-center">
@@ -496,10 +502,9 @@ export default function KPIsPage() {
             className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none focus:border-[#f71866] cursor-pointer font-medium"
           >
             <option value="Todos">Status (Todos)</option>
-            <option value="Meta Atingida">Meta Atingida</option>
-            <option value="Em Atenção">Em Atenção</option>
-            <option value="Crítico">Crítico</option>
-            <option value="PEND.">PEND.</option>
+            <option value="Green">Green</option>
+            <option value="Yellow">Yellow</option>
+            <option value="Red">Red</option>
           </select>
 
           <button
@@ -661,11 +666,6 @@ export default function KPIsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-        <StatSmallCard icon={<Target className="text-emerald-500" />} label="Metas Atingidas" value={`${stats.perc}%`} bgColor="bg-emerald-50" />
-        <StatSmallCard icon={<TrendingUp className="text-[#f71866]" />} label="Performance Global" value={stats.perfLabel} bgColor="bg-red-50" />
-        <StatSmallCard icon={<AlertCircle className="text-amber-500" />} label="Abaixo da Meta" value={String(stats.abaixo).padStart(2, "0")} bgColor="bg-amber-50" />
-      </div>
     </div>
   )
 }
