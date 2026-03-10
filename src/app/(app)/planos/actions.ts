@@ -1,6 +1,7 @@
 "use server"
 
 import sql from "@/lib/db"
+import { ensureActionPlansJiraColumns, syncActionPlanToJira } from "@/lib/jira"
 
 type ActionPlanDbRow = {
   [key: string]: unknown
@@ -31,6 +32,82 @@ async function ensureActionPlansKpiRunIdColumn() {
     `
   } catch (error) {
     console.warn("Não foi possível garantir action_plans.kpi_run_id:", error)
+  }
+}
+
+async function ensureAutomationActionPlansSchema() {
+  try {
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS progress_percent integer
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS progress_notes text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS finished_reason text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_epic_key text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_epic_url text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_story_key text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_story_url text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_issue_key text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_issue_url text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_sync_status text
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_last_synced_at timestamp without time zone
+    `
+    await sql`
+      ALTER TABLE automation_action_plans
+      ADD COLUMN IF NOT EXISTS jira_last_error text
+    `
+    await sql`
+      CREATE TABLE IF NOT EXISTS automation_action_plan_history (
+        id bigserial PRIMARY KEY,
+        automation_action_plan_id bigint NOT NULL REFERENCES automation_action_plans(id) ON DELETE CASCADE,
+        event_type text NOT NULL,
+        old_status text,
+        new_status text,
+        comment text,
+        progress_percent integer,
+        created_by text,
+        created_at timestamp without time zone NOT NULL DEFAULT now()
+      )
+    `
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_automation_action_plan_history_plan_id
+      ON automation_action_plan_history (automation_action_plan_id, created_at DESC)
+    `
+  } catch (error) {
+    console.warn("Não foi possível garantir schema de automation_action_plans:", error)
   }
 }
 
@@ -120,46 +197,78 @@ export async function fetchActionPlans(): Promise<FetchActionPlansResult> {
   try {
     try {
       await backfillActionPlansKpiRunIds()
+      await ensureAutomationActionPlansSchema()
     } catch (error) {
-      console.warn("Backfill de kpi_run_id ignorado nesta execução:", error)
+      console.warn("Preparação de schemas de planos ignorada nesta execução:", error)
     }
 
     try {
       const rows = await sql`
-        SELECT
-          ap.*,
-          c.framework,
-          c.name_control,
-          c.owner_name,
-          c.id_control AS control_code,
-          kr.status AS run_status,
-          kr.measured_value AS run_measured_value,
-          kr.period AS run_period,
-          COALESCE(
-            NULLIF(ck.kpi_name, ''),
-            NULLIF(ck.kpi_id, ''),
-            NULLIF(kr.kpi_code, ''),
-            NULLIF(substring(ap.title from '(KPI ID [A-Za-z0-9-]+)'), ''),
-            NULLIF(substring(ap.description from '(KPI ID [A-Za-z0-9-]+)'), ''),
-            'KPI não identificado'
-          ) AS kpi_affected
-        FROM action_plans ap
-        LEFT JOIN controls c ON c.id_control = ap.id_control
-        LEFT JOIN LATERAL (
-          SELECT kr.*
-          FROM kpi_runs kr
-          WHERE
-            ap.kpi_run_id IS NOT NULL
-            AND kr.id::text = ap.kpi_run_id
-          ORDER BY
-            kr.is_latest DESC NULLS LAST,
-            kr.updated_at DESC NULLS LAST,
-            kr.created_at DESC NULLS LAST
-          LIMIT 1
-        ) kr ON TRUE
-        LEFT JOIN control_kpis ck
-          ON ck.kpi_uuid::text = kr.kpi_uuid::text
-        ORDER BY ap.created_at DESC NULLS LAST, ap.id DESC
+        SELECT *
+        FROM (
+          SELECT
+            ap.id,
+            'CONTROLES'::text AS plan_type,
+            ap.id_control,
+            c.id_control AS control_code,
+            COALESCE(c.framework, ap.framework, 'N/A') AS framework,
+            ap.title,
+            ap.description,
+            COALESCE(ap.control_name, c.name_control, 'Controle não identificado') AS name_control,
+            COALESCE(
+              NULLIF(ck.kpi_name, ''),
+              NULLIF(ck.kpi_id, ''),
+              NULLIF(kr.kpi_code, ''),
+              NULLIF(substring(ap.title from '(KPI ID [A-Za-z0-9-]+)'), ''),
+              NULLIF(substring(ap.description from '(KPI ID [A-Za-z0-9-]+)'), ''),
+              'KPI não identificado'
+            ) AS kpi_affected,
+            ap.owner,
+            NULL::text AS responsavel,
+            NULL::text AS responsible,
+            c.owner_name,
+            ap.status,
+            ap.due_date,
+            ap.created_at AS sort_created_at
+          FROM action_plans ap
+          LEFT JOIN controls c ON c.id_control = ap.id_control
+          LEFT JOIN LATERAL (
+            SELECT kr.*
+            FROM kpi_runs kr
+            WHERE
+              ap.kpi_run_id IS NOT NULL
+              AND kr.id::text = ap.kpi_run_id
+            ORDER BY
+              kr.is_latest DESC NULLS LAST,
+              kr.updated_at DESC NULLS LAST,
+              kr.created_at DESC NULLS LAST
+            LIMIT 1
+          ) kr ON TRUE
+          LEFT JOIN control_kpis ck
+            ON ck.kpi_uuid::text = kr.kpi_uuid::text
+
+          UNION ALL
+
+          SELECT
+            aap.id,
+            'AUTOMACOES'::text AS plan_type,
+            aap.id_control,
+            COALESCE(aap.id_control, aap.automation_code, '') AS control_code,
+            COALESCE(aap.framework, 'N/A') AS framework,
+            aap.title,
+            aap.description,
+            COALESCE(aap.control_name, aap.automation_name, 'Automação não identificada') AS name_control,
+            COALESCE(aap.automation_name, aap.title, 'Automação não identificada') AS kpi_affected,
+            aap.owner,
+            NULL::text AS responsavel,
+            NULL::text AS responsible,
+            NULL::text AS owner_name,
+            aap.status,
+            aap.due_date,
+            aap.created_at AS sort_created_at
+          FROM automation_action_plans aap
+        ) plans
+        ORDER BY sort_created_at DESC NULLS LAST, id DESC
       `
 
       return { success: true, data: rows as ActionPlanDbRow[] }
@@ -167,21 +276,55 @@ export async function fetchActionPlans(): Promise<FetchActionPlansResult> {
       console.warn("Query completa de action_plans falhou, usando fallback:", error)
 
       const rowsFallback = await sql`
-        SELECT
-          ap.*,
-          c.framework,
-          c.name_control,
-          c.owner_name,
-          c.id_control AS control_code,
-          COALESCE(
-            NULLIF(substring(ap.title from '(KPI ID [A-Za-z0-9-]+)'), ''),
-            NULLIF(substring(ap.description from '(KPI ID [A-Za-z0-9-]+)'), ''),
-            NULLIF(ap.title, ''),
-            'KPI não identificado'
-          ) AS kpi_affected
-        FROM action_plans ap
-        LEFT JOIN controls c ON c.id_control = ap.id_control
-        ORDER BY ap.created_at DESC NULLS LAST, ap.id DESC
+        SELECT *
+        FROM (
+          SELECT
+            ap.id,
+            'CONTROLES'::text AS plan_type,
+            ap.id_control,
+            c.id_control AS control_code,
+            COALESCE(c.framework, ap.framework, 'N/A') AS framework,
+            ap.title,
+            ap.description,
+            COALESCE(ap.control_name, c.name_control, 'Controle não identificado') AS name_control,
+            COALESCE(
+              NULLIF(substring(ap.title from '(KPI ID [A-Za-z0-9-]+)'), ''),
+              NULLIF(substring(ap.description from '(KPI ID [A-Za-z0-9-]+)'), ''),
+              NULLIF(ap.title, ''),
+              'KPI não identificado'
+            ) AS kpi_affected,
+            ap.owner,
+            NULL::text AS responsavel,
+            NULL::text AS responsible,
+            c.owner_name,
+            ap.status,
+            ap.due_date,
+            ap.created_at AS sort_created_at
+          FROM action_plans ap
+          LEFT JOIN controls c ON c.id_control = ap.id_control
+
+          UNION ALL
+
+          SELECT
+            aap.id,
+            'AUTOMACOES'::text AS plan_type,
+            aap.id_control,
+            COALESCE(aap.id_control, aap.automation_code, '') AS control_code,
+            COALESCE(aap.framework, 'N/A') AS framework,
+            aap.title,
+            aap.description,
+            COALESCE(aap.control_name, aap.automation_name, 'Automação não identificada') AS name_control,
+            COALESCE(aap.automation_name, aap.title, 'Automação não identificada') AS kpi_affected,
+            aap.owner,
+            NULL::text AS responsavel,
+            NULL::text AS responsible,
+            NULL::text AS owner_name,
+            aap.status,
+            aap.due_date,
+            aap.created_at AS sort_created_at
+          FROM automation_action_plans aap
+        ) plans
+        ORDER BY sort_created_at DESC NULLS LAST, id DESC
       `
 
       return { success: true, data: rowsFallback as ActionPlanDbRow[] }
@@ -193,6 +336,7 @@ export async function fetchActionPlans(): Promise<FetchActionPlansResult> {
 }
 
 export async function createActionPlan(input: {
+  plan_type?: "CONTROLES" | "AUTOMACOES" | string
   id_control?: string | null
   kpi_affected?: string | null
   description: string
@@ -201,22 +345,89 @@ export async function createActionPlan(input: {
   criticality: string
 }): Promise<CreateActionPlanResult> {
   try {
+    await ensureActionPlansJiraColumns()
+    await ensureAutomationActionPlansSchema()
+
+    const planType = safeText(input.plan_type).toUpperCase() === "AUTOMACOES" ? "AUTOMACOES" : "CONTROLES"
     const id_control = safeText(input.id_control) || null
     const kpiAffected = safeText(input.kpi_affected)
     const description = safeText(input.description)
     const responsible = safeText(input.responsible)
     const dueDate = safeText(input.due_date)
     const criticality = safeText(input.criticality) || "Alta"
+    const controlContext = id_control
+      ? await sql`
+          SELECT
+            COALESCE(name_control, '') AS name_control,
+            COALESCE(framework, '') AS framework
+          FROM controls
+          WHERE id_control = ${id_control}
+          LIMIT 1
+        `
+      : []
+    const controlName = safeText(controlContext?.[0]?.name_control) || null
+    const framework = safeText(controlContext?.[0]?.framework) || null
 
     if (!description) return { success: false, error: "Descrição do plano é obrigatória." }
     if (!responsible) return { success: false, error: "Responsável é obrigatório." }
     if (!dueDate) return { success: false, error: "Data limite é obrigatória." }
 
-    const title = `Plano para ${kpiAffected || "KPI crítico"}`
+    const title = `Plano para ${kpiAffected || (planType === "AUTOMACOES" ? "automação crítica" : "KPI crítico")}`
     const descriptionWithMeta = `${description}
 
 Responsável: ${responsible}
 Criticidade: ${criticality}${kpiAffected ? `\nKPI: ${kpiAffected}` : ""}`
+
+    if (planType === "AUTOMACOES") {
+      const rows = await sql`
+        INSERT INTO automation_action_plans (
+          automation_code,
+          id_control,
+          control_name,
+          framework,
+          title,
+          description,
+          due_date,
+          status,
+          owner,
+          criticality,
+          plan_domain,
+          source_type,
+          created_at
+        ) VALUES (
+          ${id_control},
+          ${id_control},
+          ${controlName},
+          ${framework},
+          ${title},
+          ${descriptionWithMeta},
+          ${dueDate},
+          'Aberto',
+          ${responsible},
+          ${criticality},
+          'AUTOMACOES',
+          'MANUAL',
+          now()
+        )
+        RETURNING *
+      `
+      const created = (rows?.[0] as ActionPlanDbRow) || null
+      if (created?.id) {
+        await syncActionPlanToJira({
+          planId: String(created.id),
+          planDomain: "AUTOMACOES",
+          description,
+          controlId: id_control,
+          controlName,
+          kpiAffected: kpiAffected || "Automação",
+          responsible,
+          criticality,
+          framework,
+          dueDate,
+        })
+      }
+      return { success: true, data: created }
+    }
 
     try {
       const rows = await sql`
@@ -239,7 +450,21 @@ Criticidade: ${criticality}${kpiAffected ? `\nKPI: ${kpiAffected}` : ""}`
         )
         RETURNING *
       `
-      return { success: true, data: (rows?.[0] as ActionPlanDbRow) || null }
+      const created = (rows?.[0] as ActionPlanDbRow) || null
+      if (created?.id) {
+        await syncActionPlanToJira({
+          planId: String(created.id),
+          description,
+          controlId: id_control,
+          controlName,
+          kpiAffected,
+          responsible,
+          criticality,
+          framework,
+          dueDate,
+        })
+      }
+      return { success: true, data: created }
     } catch {
       const rowsFallback = await sql`
         INSERT INTO action_plans (
@@ -257,10 +482,24 @@ Criticidade: ${criticality}${kpiAffected ? `\nKPI: ${kpiAffected}` : ""}`
         )
         RETURNING *
       `
-      return { success: true, data: (rowsFallback?.[0] as ActionPlanDbRow) || null }
+      const created = (rowsFallback?.[0] as ActionPlanDbRow) || null
+      if (created?.id) {
+        await syncActionPlanToJira({
+          planId: String(created.id),
+          description,
+          controlId: id_control,
+          controlName,
+          kpiAffected,
+          responsible,
+          criticality,
+          framework,
+          dueDate,
+        })
+      }
+      return { success: true, data: created }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro createActionPlan:", error)
-    return { success: false, error: error?.message || "Erro ao criar plano de ação." }
+    return { success: false, error: error instanceof Error ? error.message : "Erro ao criar plano de ação." }
   }
 }

@@ -1,6 +1,12 @@
 "use server"
 
 import { neon } from "@neondatabase/serverless"
+import {
+  fetchStoredJiraIntegrationConfig,
+  normalizeJiraIntegrationConfig,
+  testJiraConnection,
+  type JiraIntegrationConfig,
+} from "@/lib/jira"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -174,6 +180,45 @@ const DEFAULT_EVIDENCE_UPLOAD_CONFIG: AdminEvidenceUploadConfig = {
   enabled: false,
   provider: "GOOGLE_DRIVE",
   drive_root_folder_id: "",
+}
+
+export async function fetchAdminJiraIntegrationConfig() {
+  const result = await fetchStoredJiraIntegrationConfig()
+  if (!result.success) return { success: false as const, error: result.error }
+  return { success: true as const, data: result.data }
+}
+
+export async function saveAdminJiraIntegrationConfig(input: Partial<JiraIntegrationConfig>) {
+  try {
+    const payload = normalizeJiraIntegrationConfig(input)
+
+    if (payload.enabled) {
+      if (!payload.base_url) return { success: false as const, error: "Informe a URL base do Jira." }
+      if (!payload.user_email) return { success: false as const, error: "Informe o usuário/e-mail técnico do Jira." }
+      if (!payload.api_token) return { success: false as const, error: "Informe o token de API do Jira." }
+      if (!payload.project_key) return { success: false as const, error: "Informe a chave do projeto no Jira." }
+      if (!payload.epic_controles_key) return { success: false as const, error: "Informe o Epic fixo de Controles." }
+      if (!payload.epic_automacoes_key) return { success: false as const, error: "Informe o Epic fixo de Automações." }
+      if (!payload.story_issue_type) return { success: false as const, error: "Informe o tipo de issue da Story." }
+      if (!payload.task_issue_type) return { success: false as const, error: "Informe o tipo de issue da Task." }
+    }
+
+    await sql`
+      INSERT INTO admin_settings (key, value_json, updated_at)
+      VALUES ('jira_integration_config', ${JSON.stringify(payload)}::jsonb, now())
+      ON CONFLICT (key) DO UPDATE
+      SET value_json = EXCLUDED.value_json,
+          updated_at = now()
+    `
+
+    return { success: true as const, data: payload }
+  } catch (e: any) {
+    return { success: false as const, error: e?.message || "Falha ao salvar configuração do Jira." }
+  }
+}
+
+export async function testAdminJiraIntegration(input: Partial<JiraIntegrationConfig>) {
+  return testJiraConnection(input)
 }
 
 function normalizeMode(v: any): KpiEvaluationMode {

@@ -19,6 +19,7 @@ import {
   Clock,
   CheckCircle2,
 } from "lucide-react"
+import { buildMonthOptions, getPreviousMonthISO, resolveReferenceMonth } from "@/lib/utils"
 
 // Importamos a Server Action
 import { fetchControles } from "./actions"
@@ -66,26 +67,6 @@ function formatPeriodoLabel(periodoISO: string) {
   const month = Number(m[2])
   const monthName = MONTHS_PT[month - 1] || ""
   return `${monthName} / ${year}`
-}
-
-function getCurrentMonthISO() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}`
-}
-
-function buildMonthOptions(startYear = 2025, endYear?: number) {
-  const nowYear = new Date().getFullYear()
-  const yEnd = Number.isFinite(endYear as any) ? Number(endYear) : nowYear + 1 // inclui próximo ano
-  const out: string[] = []
-
-  for (let y = yEnd; y >= startYear; y--) {
-    for (let m = 12; m >= 1; m--) {
-      out.push(`${y}-${String(m).padStart(2, "0")}`)
-    }
-  }
-  return out
 }
 
 function clampPage(n: number) {
@@ -165,8 +146,7 @@ export default function ControlesPage() {
     if (urlFrequencia) setSelectedFrequencia(urlFrequencia)
     setCurrentPage(urlPage)
 
-    const cur = getCurrentMonthISO()
-    const fallbackMonth = opts.includes(cur) ? cur : (opts[0] || cur)
+    const fallbackMonth = resolveReferenceMonth(opts)
 
     // se veio periodo na URL e ele existe na lista, usa ele; senão usa fallback
     const resolvedMonth = urlPeriodo && opts.includes(urlPeriodo) ? urlPeriodo : fallbackMonth
@@ -533,9 +513,7 @@ export default function ControlesPage() {
               setSelectedFocal("Todos")
               setSelectedFrequencia("Todos")
 
-              const cur = getCurrentMonthISO()
-              const nextMonth = monthOptions.includes(cur) ? cur : (monthOptions[0] || cur)
-              setSelectedMonth(nextMonth)
+              setSelectedMonth(resolveReferenceMonth(monthOptions, getPreviousMonthISO()))
 
               setCurrentPage(1)
             }}
@@ -751,10 +729,13 @@ export default function ControlesPage() {
                 <FileText className="text-slate-400 mb-4" size={28} />
                 <span className="font-bold text-slate-800 text-sm">Cadastro Manual</span>
               </Link>
-              <button className="flex flex-col items-center p-6 rounded-2xl border-2 border-slate-100 hover:border-[#f71866] hover:bg-[#f71866]/5 transition-all text-center">
+              <Link
+                href="/controles/novo?mode=massivo"
+                className="flex flex-col items-center p-6 rounded-2xl border-2 border-slate-100 hover:border-[#f71866] hover:bg-[#f71866]/5 transition-all text-center"
+              >
                 <Database className="text-slate-400 mb-4" size={28} />
                 <span className="font-bold text-slate-800 text-sm">Upload de CSV</span>
-              </button>
+              </Link>
             </div>
             <div className="p-4 bg-slate-50 flex justify-center">
               <button onClick={() => setIsNewControlModalOpen(false)} className="text-[11px] font-bold text-slate-400 uppercase">

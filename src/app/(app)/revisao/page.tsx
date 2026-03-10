@@ -4,6 +4,7 @@ import Link from "next/link"
 import React, { useEffect, useMemo, useState } from "react"
 import { CalendarDays, Loader2, Search, AlertTriangle, CheckCircle2, Clock3, Clock, ChevronDown, ChevronRight } from "lucide-react"
 import { fetchRevisaoQueue } from "./actions"
+import { buildMonthOptions, resolveReferenceMonth } from "@/lib/utils"
 
 type RevisaoItem = {
   id_control: string
@@ -44,27 +45,6 @@ const MONTHS_PT = [
 function safeText(v: any) {
   if (v === null || v === undefined) return ""
   return String(v).trim()
-}
-
-function getCurrentMonthISO() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}`
-}
-
-function buildMonthOptions(startYear = 2025) {
-  const nowYear = new Date().getFullYear()
-  const endYear = nowYear + 1
-  const out: string[] = []
-
-  for (let y = endYear; y >= startYear; y--) {
-    for (let m = 12; m >= 1; m--) {
-      out.push(`${y}-${String(m).padStart(2, "0")}`)
-    }
-  }
-
-  return out
 }
 
 function formatPeriodoLabel(periodoISO: string) {
@@ -127,9 +107,7 @@ export default function FilaRevisaoPage() {
   useEffect(() => {
     const opts = buildMonthOptions(2025)
     setMonthOptions(opts)
-
-    const current = getCurrentMonthISO()
-    setSelectedMonth(opts.includes(current) ? current : opts[0] || current)
+    setSelectedMonth(resolveReferenceMonth(opts))
   }, [])
 
   useEffect(() => {
@@ -359,6 +337,7 @@ export default function FilaRevisaoPage() {
               setFilterFramework("Todos")
               setFilterControlId("Todos")
               setFilterQueue("Pendentes")
+              setSelectedMonth(resolveReferenceMonth(monthOptions))
             }}
             className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-[#f71866] transition-colors"
           >

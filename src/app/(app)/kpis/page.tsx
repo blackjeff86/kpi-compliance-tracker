@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react"
+import { buildMonthOptions, getPreviousMonthISO, resolveReferenceMonth } from "@/lib/utils"
 
 // ✅ Buscando direto do banco via Server Action
 import { fetchKPIs } from "../controles/actions"
@@ -93,24 +94,6 @@ function formatPeriodoLabel(periodoISO: string) {
   const month = Number(m[2])
   const monthName = MONTHS_PT[month - 1] || ""
   return `${monthName} / ${year}`
-}
-
-function getCurrentMonthISO() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}`
-}
-
-function buildMonthOptions(startYear = 2025, endYear?: number) {
-  const nowYear = new Date().getFullYear()
-  const yEnd = Number.isFinite(endYear as any) ? Number(endYear) : nowYear + 1
-  const out: string[] = []
-
-  for (let y = yEnd; y >= startYear; y--) {
-    for (let m = 12; m >= 1; m--) out.push(`${y}-${String(m).padStart(2, "0")}`)
-  }
-  return out
 }
 
 /** Status mapping do banco (kpi_runs.status) -> label da UI */
@@ -205,8 +188,7 @@ export default function KPIsPage() {
     if (urlStatus) setFilterStatus(urlStatus)
     setPage(urlPage)
 
-    const cur = getCurrentMonthISO()
-    const fallbackMonth = opts.includes(cur) ? cur : (opts[0] || cur)
+    const fallbackMonth = resolveReferenceMonth(opts)
     const resolvedMonth = urlPeriodo && opts.includes(urlPeriodo) ? urlPeriodo : fallbackMonth
     setSelectedMonth(resolvedMonth)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -514,9 +496,7 @@ export default function KPIsPage() {
               setFilterKpiType("Todos")
               setFilterStatus("Todos")
 
-              const cur = getCurrentMonthISO()
-              const nextMonth = monthOptions.includes(cur) ? cur : (monthOptions[0] || cur)
-              setSelectedMonth(nextMonth)
+              setSelectedMonth(resolveReferenceMonth(monthOptions, getPreviousMonthISO()))
 
               setPage(1)
             }}

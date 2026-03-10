@@ -49,6 +49,7 @@ type PlanoDetalhe = {
   id: string
   status: "Atrasado" | "Em andamento" | "Concluído" | "Aberto"
   descricao: string
+  comentarios: string
   causaRaiz: string
   controleId: string
   controleNome: string
@@ -60,6 +61,10 @@ type PlanoDetalhe = {
   prazo: string
   atrasoDias: number
   criadoEm: string
+  jiraIssueKey: string
+  jiraIssueUrl: string
+  jiraSyncStatus: string
+  jiraLastError: string
   evidencias: Evidencia[]
   historico: Historico[]
 }
@@ -77,6 +82,7 @@ function getFallbackPlano(id: string): PlanoDetalhe {
     id,
     status: "Em andamento",
     descricao: "Plano de ação sem descrição cadastrada.",
+    comentarios: "Sem comentários registrados.",
     causaRaiz: "Sem análise de causa raiz informada.",
     controleId: "N/A",
     controleNome: "Controle não informado",
@@ -88,6 +94,10 @@ function getFallbackPlano(id: string): PlanoDetalhe {
     prazo: "N/A",
     atrasoDias: 0,
     criadoEm: "N/A",
+    jiraIssueKey: "",
+    jiraIssueUrl: "",
+    jiraSyncStatus: "",
+    jiraLastError: "",
     evidencias: [],
     historico: [],
   }
@@ -125,6 +135,7 @@ function getPlanoByIdWithQuery(basePlano: PlanoDetalhe, id: string, searchParams
     id,
     status: statusNormalized,
     descricao: withFallback(descricaoFromQuery, basePlano.descricao),
+    comentarios: basePlano.comentarios,
     causaRaiz: titleFromQuery ? `Contexto do plano: ${titleFromQuery}.` : basePlano.causaRaiz,
     controleId: withFallback(String(searchParams.get("controle_id") || ""), basePlano.controleId),
     controleNome: withFallback(String(searchParams.get("controle_nome") || ""), basePlano.controleNome),
@@ -134,6 +145,10 @@ function getPlanoByIdWithQuery(basePlano: PlanoDetalhe, id: string, searchParams
     responsavel: withFallback(String(searchParams.get("responsavel") || ""), basePlano.responsavel),
     prazo: dueDateFromQuery,
     atrasoDias: statusNormalized === "Atrasado" ? Math.max(1, basePlano.atrasoDias) : 0,
+    jiraIssueKey: basePlano.jiraIssueKey,
+    jiraIssueUrl: basePlano.jiraIssueUrl,
+    jiraSyncStatus: basePlano.jiraSyncStatus,
+    jiraLastError: basePlano.jiraLastError,
   }
 }
 
@@ -234,6 +249,10 @@ function mapDbToPlano(row: ActionPlanDetailDbRow, id: string): PlanoDetalhe {
   const kpiTarget = safeText(row?.catalog_kpi_target) || "N/A"
   const historyRows = Array.isArray(row?.history_entries) ? (row.history_entries as ActionPlanHistoryRow[]) : []
   const historicoMapeado = mapHistoryRows(historyRows, id, responsavel)
+  const comentarioAtual =
+    safeText(row?.comment) ||
+    historicoMapeado[0]?.itens.find((item) => !item.startsWith("Status:") && !item.startsWith("Progresso informado:")) ||
+    "Sem comentários registrados."
   const fallbackHistorico: Historico[] = [
     {
       id: `h-${id}-1`,
@@ -252,6 +271,7 @@ function mapDbToPlano(row: ActionPlanDetailDbRow, id: string): PlanoDetalhe {
     id,
     status,
     descricao: safeText(row?.description) || "Plano de ação sem descrição cadastrada.",
+    comentarios: comentarioAtual,
     causaRaiz: safeText(row?.title) ? `Contexto do plano: ${safeText(row?.title)}.` : "Sem análise de causa raiz informada.",
     controleId: safeText(row?.id_control || row?.control_code) || "N/A",
     controleNome: safeText(row?.name_control) || "Controle não informado",
@@ -263,6 +283,10 @@ function mapDbToPlano(row: ActionPlanDetailDbRow, id: string): PlanoDetalhe {
     prazo: toPtBrDate(row?.due_date),
     atrasoDias,
     criadoEm: toPtBrDate(row?.created_at),
+    jiraIssueKey: safeText(row?.jira_issue_key),
+    jiraIssueUrl: safeText(row?.jira_issue_url),
+    jiraSyncStatus: safeText(row?.jira_sync_status),
+    jiraLastError: safeText(row?.jira_last_error),
     evidencias: [],
     historico: historicoMapeado.length ? historicoMapeado : fallbackHistorico,
   }
@@ -501,6 +525,12 @@ export default function PlanoDetalhePage() {
                 <p className="text-sm text-slate-700 leading-relaxed">{plano.descricao}</p>
               </div>
               <div>
+                <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Comentários</h3>
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {plano.comentarios}
+                </div>
+              </div>
+              <div>
                 <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Análise de Causa Raiz</h3>
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm text-slate-700 leading-relaxed">{plano.causaRaiz}</div>
               </div>
@@ -613,6 +643,33 @@ export default function PlanoDetalhePage() {
                   <CalendarDays size={14} className="text-slate-400" />
                   {plano.criadoEm}
                 </p>
+              </div>
+
+              <hr className="border-slate-100" />
+
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Integração Jira</p>
+                {plano.jiraIssueKey ? (
+                  <div className="space-y-2">
+                    <a
+                      href={plano.jiraIssueUrl || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-bold text-[#f71866] hover:text-[#d61556]"
+                    >
+                      <ExternalLink size={14} />
+                      {plano.jiraIssueKey}
+                    </a>
+                    <p className="text-xs text-emerald-600 font-medium">Issue sincronizada com sucesso.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-600">
+                      {plano.jiraSyncStatus === "DISABLED" ? "Integração Jira desabilitada." : "Issue Jira ainda não vinculada."}
+                    </p>
+                    {plano.jiraLastError ? <p className="text-xs text-red-600">{plano.jiraLastError}</p> : null}
+                  </div>
+                )}
               </div>
             </div>
           </section>

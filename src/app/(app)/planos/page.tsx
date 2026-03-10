@@ -20,6 +20,7 @@ import { createActionPlan, fetchActionPlans } from "./actions"
 
 type ActionPlanRow = {
   planoId: string
+  planType: "CONTROLES" | "AUTOMACOES"
   id: string
   controleNome: string
   kpiAfetado: string
@@ -34,6 +35,7 @@ type ActionPlanRow = {
 
 type ActionPlanDbRow = {
   id?: unknown
+  plan_type?: unknown
   plan_id?: unknown
   id_control?: unknown
   control_code?: unknown
@@ -117,8 +119,9 @@ function calculateDelayDays(dueDateRaw: unknown, status: ActionPlanRow["status"]
 }
 
 function toPlanRow(item: ActionPlanDbRow): ActionPlanRow {
+  const planType = safeText(item?.plan_type).toUpperCase() === "AUTOMACOES" ? "AUTOMACOES" : "CONTROLES"
   const controlCode = safeText(item?.id_control || item?.control_code) || "N/A"
-  const controlName = safeText(item?.name_control) || "Controle não identificado"
+  const controlName = safeText(item?.name_control) || (planType === "AUTOMACOES" ? "Automação não identificada" : "Controle não identificado")
   const framework = safeText(item?.framework) || "N/A"
   const kpiAfetado =
     safeText(item?.kpi_affected) ||
@@ -145,6 +148,7 @@ function toPlanRow(item: ActionPlanDbRow): ActionPlanRow {
 
   return {
     planoId: rawId || fallbackSlug,
+    planType,
     id: controlCode,
     controleNome: controlName,
     kpiAfetado,
@@ -170,6 +174,7 @@ export default function PlanosAcaoPage() {
   const [createSaving, setCreateSaving] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState({
+    plan_type: "CONTROLES" as "CONTROLES" | "AUTOMACOES",
     id_control: "",
     kpi_affected: "",
     description: "",
@@ -177,6 +182,7 @@ export default function PlanosAcaoPage() {
     due_date: "",
     criticality: "Alta",
   })
+  const isAutomationPlan = createForm.plan_type === "AUTOMACOES"
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
@@ -248,6 +254,7 @@ export default function PlanosAcaoPage() {
     setCreateOpen(false)
     setCreateError(null)
     setCreateForm({
+      plan_type: "CONTROLES",
       id_control: "",
       kpi_affected: "",
       description: "",
@@ -280,6 +287,7 @@ export default function PlanosAcaoPage() {
     setCreateSaving(true)
     try {
       const result = await createActionPlan({
+        plan_type: createForm.plan_type,
         id_control: safeText(createForm.id_control) || null,
         kpi_affected: safeText(createForm.kpi_affected) || null,
         description: createForm.description,
@@ -407,6 +415,7 @@ export default function PlanosAcaoPage() {
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID / Controle</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Tipo</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Framework</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">KPI Afetado</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Responsável</th>
@@ -419,7 +428,7 @@ export default function PlanosAcaoPage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-sm">
+                  <td colSpan={9} className="px-6 py-12 text-center text-slate-400 text-sm">
                     <div className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Carregando planos de ação...
@@ -428,7 +437,7 @@ export default function PlanosAcaoPage() {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-red-500 text-sm italic">
+                  <td colSpan={9} className="px-6 py-12 text-center text-red-500 text-sm italic">
                     {error}
                   </td>
                 </tr>
@@ -438,6 +447,15 @@ export default function PlanosAcaoPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-bold text-slate-700">{item.id}</div>
                       <div className="text-[11px] text-slate-500">{item.controleNome}</div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`text-[10px] font-bold border px-2 py-1 rounded uppercase ${
+                        item.planType === "AUTOMACOES"
+                          ? "bg-blue-50 text-blue-600 border-blue-100"
+                          : "bg-[#f71866]/5 text-[#f71866] border-[#f71866]/15"
+                      }`}>
+                        {item.planType === "AUTOMACOES" ? "Automação" : "Controle"}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className="text-[10px] font-bold text-slate-500 border border-slate-200 px-2 py-1 rounded bg-slate-50 uppercase">
@@ -478,12 +496,12 @@ export default function PlanosAcaoPage() {
                     <td className="px-6 py-4 text-center">
                       <div className="flex justify-center items-center">
                         {item.status === "Concluído" ? (
-                          <Link href={`/planos/${encodeURIComponent(item.planoId)}`} className="p-2 text-slate-400 hover:text-[#f71866] transition-colors">
+                          <Link href={`/planos/${encodeURIComponent(item.planoId)}?domain=${item.planType}`} className="p-2 text-slate-400 hover:text-[#f71866] transition-colors">
                             <Eye size={18} />
                           </Link>
                         ) : (
                           <Link
-                            href={`/planos/${encodeURIComponent(item.planoId)}`}
+                            href={`/planos/${encodeURIComponent(item.planoId)}?domain=${item.planType}`}
                             className="px-5 py-1.5 text-[10px] font-bold text-[#f71866] border border-[#f71866]/30 hover:bg-[#f71866] hover:text-white rounded-md transition-all uppercase tracking-widest shadow-sm"
                           >
                             Atualizar
@@ -495,7 +513,7 @@ export default function PlanosAcaoPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-sm italic">
+                  <td colSpan={9} className="px-6 py-12 text-center text-slate-400 text-sm italic">
                     Nenhum plano de ação encontrado para os filtros aplicados.
                   </td>
                 </tr>
@@ -528,7 +546,9 @@ export default function PlanosAcaoPage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Novo Plano de Ação</h3>
                 <p className="text-xs text-slate-500 font-medium mt-1">
-                  Registre as ações de remediação, responsável e prazo para acompanhamento do plano.
+                  {isAutomationPlan
+                    ? "Registre ações da frente de automação de processos e controles, com responsável e prazo."
+                    : "Registre as ações de remediação, responsável e prazo para acompanhamento do plano."}
                 </p>
               </div>
               <button
@@ -543,22 +563,37 @@ export default function PlanosAcaoPage() {
             <div className="p-6 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">ID do Controle (opcional)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tipo do Plano</label>
+                  <select
+                    value={createForm.plan_type}
+                    onChange={(e) => setCreateForm((p) => ({ ...p, plan_type: e.target.value as "CONTROLES" | "AUTOMACOES" }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#f71866]/15 focus:border-[#f71866]"
+                  >
+                    <option value="CONTROLES">Controle</option>
+                    <option value="AUTOMACOES">Automação</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    {isAutomationPlan ? "ID do Controle ou Automação (opcional)" : "ID do Controle (opcional)"}
+                  </label>
                   <input
                     type="text"
                     value={createForm.id_control}
                     onChange={(e) => setCreateForm((p) => ({ ...p, id_control: e.target.value }))}
-                    placeholder="Ex.: CYB_C01"
+                    placeholder={isAutomationPlan ? "Ex.: AUTO-AP-01 ou ITGC-01" : "Ex.: CYB_C01"}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#f71866]/15 focus:border-[#f71866]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">KPI Afetado (opcional)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    {isAutomationPlan ? "Automação ou KPI Relacionado (opcional)" : "KPI Afetado (opcional)"}
+                  </label>
                   <input
                     type="text"
                     value={createForm.kpi_affected}
                     onChange={(e) => setCreateForm((p) => ({ ...p, kpi_affected: e.target.value }))}
-                    placeholder="Ex.: KPI ID CYB_K01"
+                    placeholder={isAutomationPlan ? "Ex.: Workflow de aprovação de acesso" : "Ex.: KPI ID CYB_K01"}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#f71866]/15 focus:border-[#f71866]"
                   />
                 </div>
@@ -579,7 +614,11 @@ export default function PlanosAcaoPage() {
                       rows={3}
                       value={createForm.description}
                       onChange={(e) => setCreateForm((p) => ({ ...p, description: e.target.value }))}
-                      placeholder="Descreva as ações de remediação para este KPI crítico..."
+                      placeholder={
+                        isAutomationPlan
+                          ? "Descreva o plano da automação, escopo, entregáveis e próximos passos..."
+                          : "Descreva as ações de remediação para este KPI crítico..."
+                      }
                       className="w-full bg-white border border-red-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 resize-none"
                     />
                   </div>

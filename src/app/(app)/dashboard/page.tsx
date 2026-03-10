@@ -20,6 +20,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { fetchDashboardData } from "./actions"
+import { getPreviousMonthISO, resolveReferenceMonth } from "@/lib/utils"
 
 type DashboardItem = {
   code: string
@@ -42,13 +43,6 @@ type ChartPoint = {
 function safeText(v: unknown) {
   if (v === null || v === undefined) return ""
   return String(v).trim()
-}
-
-function getCurrentPeriodISO() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}`
 }
 
 function formatPeriodLabel(periodISO: string) {
@@ -96,7 +90,7 @@ function controlsSubValue(count: number, total: number) {
 
 export default function DashboardPage() {
   const [filterFramework, setFilterFramework] = useState("Todos")
-  const [filterPeriodo, setFilterPeriodo] = useState(getCurrentPeriodISO())
+  const [filterPeriodo, setFilterPeriodo] = useState(getPreviousMonthISO())
 
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -133,7 +127,10 @@ export default function DashboardPage() {
 
       const payload = result.data
       setFrameworkOptions(payload.frameworkOptions)
-      setPeriodOptions(payload.periodOptions)
+      const resolvedOptions = payload.periodOptions.includes(filterPeriodo)
+        ? payload.periodOptions
+        : [filterPeriodo, ...payload.periodOptions]
+      setPeriodOptions(resolvedOptions)
       setSelectedPeriodResolved(payload.selectedPeriod)
       setSummary(payload.summary)
       setChartData(payload.chartData)
@@ -163,7 +160,7 @@ export default function DashboardPage() {
 
   const limparFiltros = () => {
     setFilterFramework("Todos")
-    setFilterPeriodo(getCurrentPeriodISO())
+    setFilterPeriodo(resolveReferenceMonth(periodOptions))
   }
 
   return (

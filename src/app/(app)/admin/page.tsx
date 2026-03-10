@@ -15,13 +15,18 @@ import {
   Save,
   UploadCloud,
   Target,
+  Link2,
 } from "lucide-react"
 import {
   fetchAdminEvidenceUploadConfig,
+  fetchAdminJiraIntegrationConfig,
   fetchAdminKpiMatrix,
   saveAdminEvidenceUploadConfig,
+  saveAdminJiraIntegrationConfig,
   saveAdminKpiConfig,
+  testAdminJiraIntegration,
 } from "./actions"
+import type { JiraIntegrationConfig } from "@/lib/jira"
 
 type MatrixRow = {
   id_control: string
@@ -49,7 +54,7 @@ type MatrixRow = {
 
 type ValueType = "PERCENT" | "NUMBER" | "BOOLEAN"
 type Direction = "UP" | "DOWN" | "BOOLEAN"
-type AdminTab = "KPI_RULES" | "EVIDENCE_UPLOAD"
+type AdminTab = "KPI_RULES" | "EVIDENCE_UPLOAD" | "JIRA"
 type UploadProvider = "GOOGLE_DRIVE"
 
 type UploadConfig = {
@@ -57,6 +62,8 @@ type UploadConfig = {
   provider: UploadProvider
   drive_root_folder_id: string
 }
+
+type JiraConfig = JiraIntegrationConfig
 
 function safeText(v: any) {
   if (v === null || v === undefined) return ""
@@ -131,6 +138,8 @@ export default function AdminConfiguracoesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingUpload, setSavingUpload] = useState(false)
+  const [savingJira, setSavingJira] = useState(false)
+  const [testingJira, setTestingJira] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
 
@@ -144,6 +153,19 @@ export default function AdminConfiguracoesPage() {
     enabled: false,
     provider: "GOOGLE_DRIVE",
     drive_root_folder_id: "",
+  })
+  const [jiraConfig, setJiraConfig] = useState<JiraConfig>({
+    enabled: false,
+    base_url: "",
+    user_email: "",
+    api_token: "",
+    project_key: "",
+    epic_controles_key: "",
+    epic_automacoes_key: "",
+    story_issue_type: "Story",
+    task_issue_type: "Task",
+    framework_field_id: "",
+    use_framework_labels: false,
   })
 
   const [configOpen, setConfigOpen] = useState(false)
@@ -161,7 +183,11 @@ export default function AdminConfiguracoesPage() {
       setOkMsg(null)
 
       try {
-        const [resKpis, resUpload] = await Promise.all([fetchAdminKpiMatrix(), fetchAdminEvidenceUploadConfig()])
+        const [resKpis, resUpload, resJira] = await Promise.all([
+          fetchAdminKpiMatrix(),
+          fetchAdminEvidenceUploadConfig(),
+          fetchAdminJiraIntegrationConfig(),
+        ])
 
         if (!resKpis.success) {
           setRows([])
@@ -174,6 +200,12 @@ export default function AdminConfiguracoesPage() {
           setUploadConfig((resUpload as any).data)
         } else {
           setErrorMsg((resUpload as any).error || "Falha ao carregar configuração de upload.")
+        }
+
+        if (resJira.success) {
+          setJiraConfig((resJira as any).data)
+        } else {
+          setErrorMsg((resJira as any).error || "Falha ao carregar configuração do Jira.")
         }
       } catch (error) {
         console.error("Erro ao carregar admin matrix:", error)
@@ -311,6 +343,47 @@ export default function AdminConfiguracoesPage() {
     }
   }
 
+  async function handleSaveJiraConfig() {
+    setSavingJira(true)
+    setErrorMsg(null)
+    setOkMsg(null)
+
+    try {
+      const res = await saveAdminJiraIntegrationConfig(jiraConfig)
+      if (!res.success) {
+        setErrorMsg((res as any).error || "Falha ao salvar configuração do Jira.")
+        return
+      }
+      setJiraConfig((res as any).data)
+      setOkMsg("Configuração do Jira salva com sucesso.")
+    } catch (error) {
+      console.error("Erro ao salvar configuração do Jira:", error)
+      setErrorMsg("Falha ao salvar configuração do Jira.")
+    } finally {
+      setSavingJira(false)
+    }
+  }
+
+  async function handleTestJiraConfig() {
+    setTestingJira(true)
+    setErrorMsg(null)
+    setOkMsg(null)
+
+    try {
+      const res = await testAdminJiraIntegration(jiraConfig)
+      if (!res.success) {
+        setErrorMsg((res as any).error || "Falha ao testar conexão com Jira.")
+        return
+      }
+      setOkMsg(`Conexão com Jira validada para ${(res as any).data?.displayName || jiraConfig.user_email}.`)
+    } catch (error) {
+      console.error("Erro ao testar configuração do Jira:", error)
+      setErrorMsg("Falha ao testar conexão com Jira.")
+    } finally {
+      setTestingJira(false)
+    }
+  }
+
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
@@ -352,6 +425,14 @@ export default function AdminConfiguracoesPage() {
           }`}
         >
           <UploadCloud size={14} /> Upload de Evidências
+        </button>
+        <button
+          onClick={() => setActiveTab("JIRA")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest inline-flex items-center gap-2 transition-all ${
+            activeTab === "JIRA" ? "bg-[#f71963] text-white" : "text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          <Link2 size={14} /> Integração Jira
         </button>
       </div>
 
@@ -753,6 +834,168 @@ export default function AdminConfiguracoesPage() {
               className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-[#f71963] text-white text-sm font-bold hover:bg-[#d61556] disabled:opacity-60"
             >
               {savingUpload ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar Configuração
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "JIRA" ? (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-6">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Integração com Jira</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Quando habilitada, cada plano de ação novo criado pelo sistema gera automaticamente uma issue no Jira.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Status da Integração</label>
+              <select
+                value={jiraConfig.enabled ? "enabled" : "disabled"}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, enabled: e.target.value === "enabled" }))}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none"
+              >
+                <option value="enabled">Habilitada</option>
+                <option value="disabled">Desabilitada</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Projeto Padrão</label>
+              <input
+                type="text"
+                value={jiraConfig.project_key}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, project_key: e.target.value.toUpperCase() }))}
+                placeholder="TAP"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">URL Base do Jira</label>
+              <input
+                type="text"
+                value={jiraConfig.base_url}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, base_url: e.target.value }))}
+                placeholder="https://suaempresa.atlassian.net"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Usuário / E-mail Técnico</label>
+              <input
+                type="email"
+                value={jiraConfig.user_email}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, user_email: e.target.value }))}
+                placeholder="grc-bot@empresa.com"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Epic Fixo Controles</label>
+              <input
+                type="text"
+                value={jiraConfig.epic_controles_key}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, epic_controles_key: e.target.value.toUpperCase() }))}
+                placeholder="TAP-189"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Epic Fixo Automações</label>
+              <input
+                type="text"
+                value={jiraConfig.epic_automacoes_key}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, epic_automacoes_key: e.target.value.toUpperCase() }))}
+                placeholder="TAP-190"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Issue Type da Story</label>
+              <input
+                type="text"
+                value={jiraConfig.story_issue_type}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, story_issue_type: e.target.value }))}
+                placeholder="Story"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Issue Type da Task</label>
+              <input
+                type="text"
+                value={jiraConfig.task_issue_type}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, task_issue_type: e.target.value }))}
+                placeholder="Task"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">API Token</label>
+              <input
+                type="password"
+                value={jiraConfig.api_token}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, api_token: e.target.value }))}
+                placeholder="Token gerado no Atlassian"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+              <p className="text-[11px] text-slate-500 mt-2">
+                O sistema usa autenticação Basic com e-mail técnico + API token do Atlassian Cloud.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Framework Field ID</label>
+              <input
+                type="text"
+                value={jiraConfig.framework_field_id}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, framework_field_id: e.target.value }))}
+                placeholder="customfield_16627"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71963]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Fallback de Framework</label>
+              <select
+                value={jiraConfig.use_framework_labels ? "labels" : "field-only"}
+                onChange={(e) => setJiraConfig((prev) => ({ ...prev, use_framework_labels: e.target.value === "labels" }))}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none"
+              >
+                <option value="field-only">Somente campo customizado</option>
+                <option value="labels">Campo + labels</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+            O fluxo atual no Jira fica preparado para: Epic fixo por domínio, Story por controle e issue do plano abaixo da Story. O framework é enviado no campo configurado acima.
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleTestJiraConfig}
+              disabled={testingJira}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {testingJira ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Testar Conexão
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveJiraConfig}
+              disabled={savingJira}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-[#f71963] text-white text-sm font-bold hover:bg-[#d61556] disabled:opacity-60"
+            >
+              {savingJira ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Salvar Configuração
             </button>
           </div>
         </div>

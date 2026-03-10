@@ -1,6 +1,7 @@
 "use server"
 
 import { neon } from "@neondatabase/serverless"
+import { ensureActionPlansJiraColumns, syncActionPlanToJira } from "@/lib/jira"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -419,6 +420,8 @@ export async function saveKpiExecution(payload: {
     `
 
     if (status === "RED" && actionPlan) {
+      await ensureActionPlansJiraColumns()
+
       const description = safeText(actionPlan.description) as string
       const responsible = safeText(actionPlan.responsible) as string
       const due_date = safeText(actionPlan.due_date) as string
@@ -429,7 +432,7 @@ export async function saveKpiExecution(payload: {
 
       // schema atual do banco (action_plans): owner + kpi_run_id
       try {
-        await sql`
+        const createdRows = await sql`
           INSERT INTO action_plans (
             id_control,
             title,
@@ -449,7 +452,20 @@ export async function saveKpiExecution(payload: {
             ${kpiRunId || null},
             now()
           )
+          RETURNING *
         `
+        const created = createdRows?.[0]
+        if (created?.id) {
+          await syncActionPlanToJira({
+            planId: String(created.id),
+            description,
+            controlId: id_control,
+            kpiAffected: kpiCodeText || null,
+            responsible,
+            criticality,
+            dueDate: due_date,
+          })
+        }
       } catch {
         // fallback legado: mantém rastreabilidade no description
         const descriptionWithMeta = `${description}
@@ -461,7 +477,7 @@ Período: ${period}
 KPI Run: ${kpiRunId || "N/A"}`
 
         try {
-          await sql`
+          const createdRows = await sql`
             INSERT INTO action_plans (
               id_control,
               title,
@@ -479,9 +495,22 @@ KPI Run: ${kpiRunId || "N/A"}`
               ${ownerText},
               now()
             )
+            RETURNING *
           `
+          const created = createdRows?.[0]
+          if (created?.id) {
+            await syncActionPlanToJira({
+              planId: String(created.id),
+              description,
+              controlId: id_control,
+              kpiAffected: kpiCodeText || null,
+              responsible,
+              criticality,
+              dueDate: due_date,
+            })
+          }
         } catch {
-          await sql`
+          const createdRows = await sql`
             INSERT INTO action_plans (
               id_control,
               title,
@@ -495,7 +524,20 @@ KPI Run: ${kpiRunId || "N/A"}`
               ${due_date},
               'Aberto'
             )
+            RETURNING *
           `
+          const created = createdRows?.[0]
+          if (created?.id) {
+            await syncActionPlanToJira({
+              planId: String(created.id),
+              description,
+              controlId: id_control,
+              kpiAffected: kpiCodeText || null,
+              responsible,
+              criticality,
+              dueDate: due_date,
+            })
+          }
         }
       }
     }
