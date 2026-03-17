@@ -2,7 +2,7 @@
 
 "use client"
 
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import {
@@ -133,6 +133,14 @@ function statusLooksRed(status: string) {
 }
 
 export default function DetalheControlePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando controle...</div>}>
+      <DetalheControlePageContent />
+    </Suspense>
+  )
+}
+
+function DetalheControlePageContent() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()

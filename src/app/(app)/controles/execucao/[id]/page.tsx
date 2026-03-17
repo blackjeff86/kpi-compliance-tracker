@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import {
@@ -129,6 +129,14 @@ function formatPeriodoLabel(periodoISO: string) {
 }
 
 export default function RegistrarExecucaoPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando execucao...</div>}>
+      <RegistrarExecucaoPageContent />
+    </Suspense>
+  )
+}
+
+function RegistrarExecucaoPageContent() {
   const params = useParams()
   const searchParams = useSearchParams()
   const router = useRouter()

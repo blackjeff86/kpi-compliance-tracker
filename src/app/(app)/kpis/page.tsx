@@ -1,7 +1,7 @@
 // src/app/(app)/kpis/page.tsx
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   Search,
@@ -146,6 +146,14 @@ function extractKpiNumber(code: any): number {
 }
 
 export default function KPIsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando KPIs...</div>}>
+      <KPIsPageContent />
+    </Suspense>
+  )
+}
+
+function KPIsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 

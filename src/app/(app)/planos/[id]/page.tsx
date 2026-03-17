@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useState } from "react"
+import React, { Suspense, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import {
@@ -323,6 +323,14 @@ function getStatusBadge(status: PlanoDetalhe["status"]) {
 }
 
 export default function PlanoDetalhePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando plano...</div>}>
+      <PlanoDetalhePageContent />
+    </Suspense>
+  )
+}
+
+function PlanoDetalhePageContent() {
   const params = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const searchParamsKey = searchParams.toString()

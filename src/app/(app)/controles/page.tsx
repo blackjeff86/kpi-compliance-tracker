@@ -1,7 +1,7 @@
 // src/app/(app)/controles/page.tsx
 "use client"
 
-import React, { useState, useMemo, useEffect } from "react"
+import React, { Suspense, useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -98,6 +98,14 @@ function buildControlsQuery(params: {
 }
 
 export default function ControlesPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando controles...</div>}>
+      <ControlesPageContent />
+    </Suspense>
+  )
+}
+
+function ControlesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const ITEMS_PER_PAGE = 15

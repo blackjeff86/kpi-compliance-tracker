@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import {
@@ -77,6 +77,14 @@ function isTrueLike(v: any) {
 }
 
 export default function KpiDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando KPI...</div>}>
+      <KpiDetailPageContent />
+    </Suspense>
+  )
+}
+
+function KpiDetailPageContent() {
   const params = useParams()
   const searchParams = useSearchParams()
 
