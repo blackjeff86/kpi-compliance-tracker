@@ -90,6 +90,7 @@ function computeStatusClient(params: {
 
 function mapStatusToUi(s: string) {
   const up = String(s || "").toUpperCase()
+  if (up === "REPROVADO") return { label: "Reprovado", dot: "bg-red-500", text: "text-red-600" }
   if (up === "GREEN") return { label: "Meta Atingida", dot: "bg-emerald-500", text: "text-emerald-600" }
   if (up === "RED") return { label: "Crítico", dot: "bg-red-500", text: "text-red-600" }
   if (up === "YELLOW") return { label: "Em Atenção", dot: "bg-amber-500", text: "text-amber-600" }
@@ -284,6 +285,7 @@ function RegistrarExecucaoPageContent() {
   }, [kpi, mode, resultado, resultadoBool, rules])
 
   const stUi = useMemo(() => mapStatusToUi(computedStatus), [computedStatus])
+  const grcReviewUi = useMemo(() => mapStatusToUi(run?.grc_final_status || ""), [run?.grc_final_status])
 
   const thresholdLabel = useMemo(() => {
     const target = kpi?.kpi_target
@@ -582,6 +584,39 @@ function RegistrarExecucaoPageContent() {
           </div>
 
           <form className="p-8 space-y-8" onSubmit={(e) => e.preventDefault()}>
+            {safeText(run?.grc_final_status) ? (
+              <div
+                className={`rounded-2xl border p-5 ${
+                  safeText(run?.grc_final_status).toUpperCase() === "REPROVADO"
+                    ? "border-red-200 bg-red-50/60"
+                    : "border-blue-100 bg-blue-50/60"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Última Revisão GRC deste período</div>
+                    <div className={`mt-2 inline-flex items-center gap-2 text-sm font-bold ${grcReviewUi.text}`}>
+                      <span className={`h-2 w-2 rounded-full ${grcReviewUi.dot}`} />
+                      {grcReviewUi.label}
+                    </div>
+                  </div>
+                  <div className="text-right text-[11px] text-slate-500">
+                    <div>{safeText(run?.grc_reviewed_by_email) || "GRC"}</div>
+                    <div>{safeText(run?.grc_reviewed_at) ? new Date(run.grc_reviewed_at).toLocaleString("pt-BR") : "Sem data"}</div>
+                  </div>
+                </div>
+
+                {safeText(run?.grc_review_comment) ? (
+                  <div className="mt-4 rounded-xl border border-white/70 bg-white/70 p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Comentário do Analista GRC</div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
+                      {safeText(run?.grc_review_comment)}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
               <div className="space-y-3">
                 <label className="text-[10px] font-bold text-[#f71866] uppercase tracking-widest block border-l-2 border-[#f71866] pl-3">

@@ -29,6 +29,134 @@ import {
   Loader2,
 } from "lucide-react"
 
+const CSV_HEADERS = [
+  "id_control",
+  "name_control",
+  "description_control",
+  "goal_control",
+  "framework",
+  "owner_name",
+  "owner_email",
+  "owner_area",
+  "focal_point_name",
+  "focal_point_email",
+  "focal_point_area",
+  "frequency",
+  "risk_id",
+  "risk_name",
+  "risk_title",
+  "risk_description",
+  "kpi_id",
+  "kpi_name",
+  "kpi_type",
+  "kpi_target",
+  "kpi_value_type",
+  "kpi_direction",
+  "kpi_warning_margin",
+  "kpi_description",
+  "status",
+]
+
+const CSV_REQUIRED_FIELDS = [
+  { name: "id_control", description: "Identificador do controle. Cada controle pode aparecer em mais de uma linha quando tiver vários KPIs." },
+  { name: "kpi_id", description: "Identificador do KPI. Linhas sem esse campo são ignoradas na importação." },
+]
+
+const CSV_COLUMN_GUIDE = [
+  { name: "id_control", kind: "Obrigatória", description: "Código único do controle. Ex.: CONT-001 ou ITGC-01." },
+  { name: "name_control", kind: "Recomendada", description: "Nome amigável do controle." },
+  { name: "description_control", kind: "Opcional", description: "Descrição detalhada do controle." },
+  { name: "goal_control", kind: "Opcional", description: "Objetivo do controle." },
+  { name: "framework", kind: "Opcional", description: "Framework associado. Ex.: SOX, ISO27001, PCI-DSS." },
+  { name: "owner_name", kind: "Opcional", description: "Nome do owner do controle." },
+  { name: "owner_email", kind: "Opcional", description: "E-mail do owner." },
+  { name: "owner_area", kind: "Opcional", description: "Área responsável pelo owner." },
+  { name: "focal_point_name", kind: "Opcional", description: "Nome do ponto focal." },
+  { name: "focal_point_email", kind: "Opcional", description: "E-mail do ponto focal." },
+  { name: "focal_point_area", kind: "Opcional", description: "Área do ponto focal." },
+  { name: "frequency", kind: "Opcional", description: "Periodicidade do controle. O sistema normaliza PT/EN." },
+  { name: "risk_id", kind: "Opcional", description: "Código do risco relacionado." },
+  { name: "risk_name", kind: "Opcional", description: "Nome do risco." },
+  { name: "risk_title", kind: "Opcional", description: "Classificação do risco." },
+  { name: "risk_description", kind: "Opcional", description: "Descrição do risco." },
+  { name: "kpi_id", kind: "Obrigatória", description: "Código único do KPI dentro do controle." },
+  { name: "kpi_name", kind: "Recomendada", description: "Nome do KPI." },
+  { name: "kpi_type", kind: "Opcional", description: "Tipo do KPI. Manual ou Automated." },
+  { name: "kpi_target", kind: "Opcional", description: "Meta do KPI. Ex.: 95, 100%, Sim." },
+  { name: "kpi_value_type", kind: "Opcional", description: "Tipo do valor da meta: NUMBER, PERCENT ou BOOLEAN." },
+  { name: "kpi_direction", kind: "Opcional", description: "Direção da meta: UP, DOWN ou BOOLEAN." },
+  { name: "kpi_warning_margin", kind: "Opcional", description: "Faixa de warning. Ex.: 5 ou 10%." },
+  { name: "kpi_description", kind: "Opcional", description: "Descrição da lógica do KPI." },
+  { name: "status", kind: "Opcional", description: "Status textual do controle. Recomendado usar Ativo ou Inativo." },
+]
+
+const CSV_ACCEPTED_OPTIONS = [
+  {
+    column: "frequency",
+    helper: "Pode ser enviada em português ou inglês; o sistema converte para o padrão interno.",
+    values: [
+      "DAILY: diário, diaria, diariamente, daily, day, todo_dia, todos_os_dias, D1, D+1",
+      "WEEKLY: semanal, weekly, week, w, wk, w1",
+      "MONTHLY: mensal, monthly, month, m, mo, mon",
+      "QUARTERLY: trimestral, quarterly, quarter, quart, q, qtr, q1-q4",
+      "SEMI_ANNUAL: semestral, semestre, semi_annual, semiannual, semi, half, h1, h2",
+      "ANNUAL: anual, annual, yearly, year, y, yr",
+      "ON_DEMAND: sob demanda, on_demand, on-demand, ondemand, ad hoc, adhoc, event, as needed",
+    ],
+  },
+  {
+    column: "risk_title",
+    helper: "A classificação do risco é normalizada para três níveis internos.",
+    values: [
+      "CRITICAL: high, alto, critical, crítico",
+      "MEDIUM: medium, médio, medio",
+      "LOW: low, baixo",
+    ],
+  },
+  {
+    column: "kpi_type",
+    helper: "Qualquer valor com 'aut' ou 'api' vira Automated; os demais viram Manual.",
+    values: ["Manual", "Automated", "Automated (API/Script)"],
+  },
+  {
+    column: "kpi_value_type",
+    helper: "Se não for informado, o sistema tenta inferir pela meta.",
+    values: [
+      "BOOLEAN: boolean, bool, sim_nao, sim/nao, yes_no, yes/no",
+      "PERCENT: percent, percentual, percentage, %",
+      "NUMBER: number, numeric, numeral, numero, número",
+    ],
+  },
+  {
+    column: "kpi_direction",
+    helper: "Define se a meta é melhor quando sobe ou quando desce.",
+    values: [
+      "UP: up, higher_better, maior_melhor, maior, asc, ascendente, increase",
+      "DOWN: down, lower_better, menor_melhor, menor, desc, descendente, decrease",
+      "BOOLEAN: boolean, bool",
+    ],
+  },
+  {
+    column: "kpi_target",
+    helper: "Formato esperado depende do tipo do KPI.",
+    values: [
+      "BOOLEAN: Sim, Não, Yes, No, True, False, 1, 0, Conforme, Não Conforme",
+      "PERCENT: 95%, 100%, 87,5%",
+      "NUMBER: 10, 42, 99.5",
+    ],
+  },
+  {
+    column: "kpi_warning_margin",
+    helper: "Aceita número puro ou percentual. O sistema remove '%' quando necessário.",
+    values: ["5", "10", "2.5", "7,5", "10%"],
+  },
+  {
+    column: "status",
+    helper: "Esse campo é gravado como texto. Para consistência operacional, recomendamos padronizar.",
+    values: ["Ativo", "Inativo"],
+  },
+]
+
 export default function CadastroControlePage() {
   return (
     <Suspense fallback={<div className="p-20 text-center font-bold text-slate-400">Carregando formulário...</div>}>
@@ -798,7 +926,7 @@ function CadastroControleContent() {
         </div>
       ) : (
         /* --- TELA DE UPLOAD CSV (MASSIVO) --- */
-        <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+        <div className="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
           <div
             onDragOver={(e) => {
               e.preventDefault()
@@ -850,6 +978,110 @@ function CadastroControleContent() {
               <span className="text-[10px] font-bold uppercase tracking-wider">
                 O sistema aceita termos em Português/Inglês para Risco, Frequência, Tipo de KPI e regras de meta
               </span>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
+            <div className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-100 bg-slate-50">
+                <h3 className="text-lg font-bold text-slate-900">Guia da Planilha CSV</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Use os cabeçalhos exatamente como no modelo. Os analistas podem repetir o mesmo <span className="font-semibold">id_control</span> em várias linhas para cadastrar mais de um KPI no mesmo controle.
+                </p>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-700">Campos obrigatórios</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {CSV_REQUIRED_FIELDS.map((field) => (
+                      <div key={field.name} className="rounded-2xl bg-white/90 border border-emerald-100 px-4 py-3">
+                        <p className="font-bold text-sm text-slate-900">{field.name}</p>
+                        <p className="text-xs text-slate-600 mt-1 leading-5">{field.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">25 colunas do modelo</p>
+                      <p className="text-xs text-slate-500 mt-1">A ordem abaixo corresponde ao arquivo disponibilizado para download.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {CSV_HEADERS.map((header) => (
+                      <span
+                        key={header}
+                        className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold tracking-wide"
+                      >
+                        {header}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500 mb-3">O que preencher em cada coluna</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {CSV_COLUMN_GUIDE.map((column) => (
+                      <div key={column.name} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-bold text-sm text-slate-900">{column.name}</p>
+                          <span
+                            className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              column.kind === "Obrigatória"
+                                ? "bg-[#f71866] text-white"
+                                : column.kind === "Recomendada"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-slate-200 text-slate-600"
+                            }`}
+                          >
+                            {column.kind}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-2 leading-5">{column.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 text-white rounded-[2rem] shadow-xl overflow-hidden">
+              <div className="px-6 py-5 border-b border-white/10">
+                <h3 className="text-lg font-bold">Valores aceitos nas colunas padronizadas</h3>
+                <p className="text-sm text-slate-300 mt-1">
+                  Estas colunas passam por normalização automática. Preenchendo conforme os exemplos abaixo, a importação fica mais previsível.
+                </p>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {CSV_ACCEPTED_OPTIONS.map((section) => (
+                  <div key={section.column} className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                    <p className="font-bold text-sm tracking-tight">{section.column}</p>
+                    <p className="text-xs text-slate-300 mt-1 leading-5">{section.helper}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {section.values.map((value) => (
+                        <span key={value} className="px-3 py-1.5 rounded-full bg-white text-slate-800 text-[11px] font-semibold">
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Boas práticas para o preenchimento</p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-200 leading-6 list-disc pl-5">
+                    <li>Mantenha uma linha por combinação de controle + KPI.</li>
+                    <li>Repita os dados do controle quando houver mais de um KPI para o mesmo <span className="font-semibold">id_control</span>.</li>
+                    <li>Evite renomear cabeçalhos ou inserir colunas extras no meio do arquivo.</li>
+                    <li>Para reduzir retrabalho, use o botão <span className="font-semibold">Baixar Modelo</span> como ponto de partida.</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
 

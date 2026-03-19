@@ -29,7 +29,7 @@ export async function fetchLatestKpiStatuses(kpiUuids: string[], period: string)
       const rows = await sql`
         SELECT DISTINCT ON (kpi_uuid)
           kpi_uuid,
-          status
+          COALESCE(NULLIF(TRIM(grc_final_status), ''), status::text) AS status
         FROM kpi_runs
         WHERE kpi_uuid = ANY(${uuids}::uuid[])
           AND period = ${periodoISO}

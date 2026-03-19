@@ -14,7 +14,7 @@ function safeText(v: any) {
  * ✅ Retorna o run mais recente (preferindo is_latest) por kpi_uuid no período informado.
  * Saída:
  * {
- *   [kpi_uuid]: { measured_value: number | null, status: string }
+ *   [kpi_uuid]: { measured_value: number | null, status: string, grc_final_status: string, grc_review_comment: string }
  * }
  */
 export async function fetchLatestKpiRunsForPeriod(kpiUuids: string[], period: string) {
@@ -23,7 +23,10 @@ export async function fetchLatestKpiRunsForPeriod(kpiUuids: string[], period: st
     const uuids = Array.isArray(kpiUuids) ? kpiUuids.map((u) => String(u).trim()).filter(Boolean) : []
 
     if (!periodoISO || uuids.length === 0) {
-      return { success: true as const, data: {} as Record<string, { measured_value: number | null; status: string }> }
+      return {
+        success: true as const,
+        data: {} as Record<string, { measured_value: number | null; status: string; grc_final_status: string; grc_review_comment: string }>,
+      }
     }
 
     // ✅ 1) tenta pegar só is_latest = true
@@ -31,7 +34,9 @@ export async function fetchLatestKpiRunsForPeriod(kpiUuids: string[], period: st
       SELECT DISTINCT ON (kpi_uuid)
         kpi_uuid,
         measured_value,
-        status
+        status,
+        COALESCE(grc_final_status, '') AS grc_final_status,
+        COALESCE(grc_review_comment, '') AS grc_review_comment
       FROM kpi_runs
       WHERE kpi_uuid = ANY(${uuids}::uuid[])
         AND period = ${periodoISO}
@@ -47,14 +52,16 @@ export async function fetchLatestKpiRunsForPeriod(kpiUuids: string[], period: st
             SELECT DISTINCT ON (kpi_uuid)
               kpi_uuid,
               measured_value,
-              status
+              status,
+              COALESCE(grc_final_status, '') AS grc_final_status,
+              COALESCE(grc_review_comment, '') AS grc_review_comment
             FROM kpi_runs
             WHERE kpi_uuid = ANY(${uuids}::uuid[])
               AND period = ${periodoISO}
             ORDER BY kpi_uuid, updated_at DESC NULLS LAST, created_at DESC
           `
 
-    const map: Record<string, { measured_value: number | null; status: string }> = {}
+    const map: Record<string, { measured_value: number | null; status: string; grc_final_status: string; grc_review_comment: string }> = {}
 
     for (const r of rows || []) {
       const key = String(r?.kpi_uuid || "").trim()
@@ -62,6 +69,8 @@ export async function fetchLatestKpiRunsForPeriod(kpiUuids: string[], period: st
       map[key] = {
         measured_value: r?.measured_value === null || r?.measured_value === undefined ? null : Number(r.measured_value),
         status: String(r?.status || "").trim(),
+        grc_final_status: String(r?.grc_final_status || "").trim(),
+        grc_review_comment: String(r?.grc_review_comment || "").trim(),
       }
     }
 

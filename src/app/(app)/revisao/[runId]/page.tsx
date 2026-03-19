@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import React, { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
@@ -50,14 +50,29 @@ type ReviewDetail = {
     kpi_id: string
     kpi_name: string
     kpi_target: string
+    kpi_evaluation_mode: "UP" | "DOWN" | "BOOLEAN"
+    grc_final_status: string
+    kpi_rules: {
+      yellow_ratio: number
+      zero_meta_yellow_max: number
+    }
+    kpi_rules_raw?: {
+      value_type?: string
+      direction?: string
+      warning_margin?: number
+    } | null
   }
   latestReview: {
     review_status?: string
+    override_status?: string
     analyst_comment?: string
     override_reason?: string
   } | null
   actionPlans: ActionPlan[]
 }
+
+type ReviewDecision = "APPROVED" | "NEEDS_ADJUSTMENTS" | "REJECTED" | ""
+type ReviewFinalStatus = "GREEN" | "YELLOW" | "RED" | "REPROVADO" | ""
 
 function safeText(v: any) {
   if (v === null || v === undefined) return ""
@@ -81,19 +96,142 @@ function statusClass(status: string) {
   if (up === "GREEN") return "bg-emerald-50 text-emerald-700 border-emerald-100"
   if (up === "YELLOW") return "bg-amber-50 text-amber-700 border-amber-100"
   if (up === "RED") return "bg-red-50 text-red-700 border-red-100"
+  if (up === "REPROVADO") return "bg-red-50 text-red-700 border-red-100"
   return "bg-slate-50 text-slate-600 border-slate-100"
+}
+
+function normalizeStatus(v: any): ReviewFinalStatus {
+  const up = safeText(v).toUpperCase()
+  if (up === "GREEN" || up === "YELLOW" || up === "RED" || up === "REPROVADO") return up
+  return ""
+}
+
+function mapDecisionToFinalStatus(decision: ReviewDecision, executionStatus: ReviewFinalStatus) {
+  if (decision === "APPROVED") return executionStatus
+  if (decision === "NEEDS_ADJUSTMENTS") return "YELLOW"
+  if (decision === "REJECTED") return "REPROVADO"
+  return ""
+}
+
+function mapReviewStatusToDecision(v: any): ReviewDecision {
+  const up = safeText(v).toUpperCase()
+  if (up === "APPROVED" || up === "NEEDS_ADJUSTMENTS" || up === "REJECTED") return up
+  return ""
+}
+
+function statusLabel(status: ReviewFinalStatus) {
+  if (status === "GREEN") return "Conforme"
+  if (status === "YELLOW") return "Em atenção"
+  if (status === "RED") return "Não conforme"
+  if (status === "REPROVADO") return "Reprovado"
+  return "Pendente"
+}
+
+function mapManualFinalStatusToDecision(status: ReviewFinalStatus): ReviewDecision {
+  if (status === "GREEN") return "APPROVED"
+  if (status === "YELLOW") return "NEEDS_ADJUSTMENTS"
+  if (status === "RED") return "NEEDS_ADJUSTMENTS"
+  if (status === "REPROVADO") return "REJECTED"
+  return ""
+}
+
+function parseNumberLoose(v: any): number | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  const s = safeText(v).replace("%", "").replace(",", ".")
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
+function isTrueLike(v: any) {
+  const s = safeText(v).toLowerCase()
+  return ["true", "1", "sim", "yes", "ok", "conforme"].includes(s)
+}
+
+function formatKpiDirection(mode: "UP" | "DOWN" | "BOOLEAN") {
+  if (mode === "UP") return "Quanto maior, melhor"
+  if (mode === "DOWN") return "Quanto menor, melhor"
+  return "Booleano (Sim/Não)"
+}
+
+function formatThresholdValue(n: number) {
+  if (!Number.isFinite(n)) return "N/A"
+  const rounded = Math.round(n * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, "")
+}
+
+function buildKpiRuleSummary(run: ReviewDetail["run"]) {
+  const mode = run.kpi_evaluation_mode || "UP"
+  const targetText = safeText(run.kpi_target)
+
+  if (!targetText) {
+    return {
+      targetLabel: "Não configurado",
+      directionLabel: formatKpiDirection(mode),
+      lines: ["Regra de avaliação não configurada."],
+    }
+  }
+
+  if (mode === "BOOLEAN") {
+    const expected = isTrueLike(targetText) ? "Sim" : "Não"
+    return {
+      targetLabel: expected,
+      directionLabel: formatKpiDirection(mode),
+      lines: [`Green quando o valor for ${expected}`, "Red quando o valor divergir do esperado"],
+    }
+  }
+
+  const targetNumber = parseNumberLoose(targetText)
+  if (targetNumber === null) {
+    return {
+      targetLabel: targetText,
+      directionLabel: formatKpiDirection(mode),
+      lines: ["Meta configurada, mas sem regra numérica legível."],
+    }
+  }
+
+  if (mode === "UP") {
+    const yellowFloor = targetNumber * (run.kpi_rules?.yellow_ratio ?? 0.9)
+    return {
+      targetLabel: targetText,
+      directionLabel: formatKpiDirection(mode),
+      lines: [
+        `Green >= ${formatThresholdValue(targetNumber)}`,
+        `Yellow entre ${formatThresholdValue(yellowFloor)} e ${formatThresholdValue(targetNumber)}`,
+        `Red abaixo de ${formatThresholdValue(yellowFloor)}`,
+      ],
+    }
+  }
+
+  const redThreshold = targetNumber + (run.kpi_rules?.zero_meta_yellow_max ?? 1)
+  return {
+    targetLabel: targetText,
+    directionLabel: formatKpiDirection(mode),
+    lines: [
+      `Green <= ${formatThresholdValue(targetNumber)}`,
+      `Yellow até ${formatThresholdValue(redThreshold)}`,
+      `Red acima de ${formatThresholdValue(redThreshold)}`,
+    ],
+  }
 }
 
 export default function RevisaoDetalhePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const params = useParams<{ runId: string }>()
   const runId = safeText(params?.runId)
+  const backHref = useMemo(() => {
+    const qs = searchParams?.toString() || ""
+    return qs ? `/revisao?${qs}` : "/revisao"
+  }, [searchParams])
 
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
   const [detail, setDetail] = useState<ReviewDetail | null>(null)
 
-  const [reviewStatus, setReviewStatus] = useState<"GREEN" | "YELLOW" | "RED" | "">("")
+  const [reviewDecision, setReviewDecision] = useState<ReviewDecision>("")
+  const [manualFinalStatus, setManualFinalStatus] = useState<ReviewFinalStatus>("")
   const [reason, setReason] = useState("")
   const [comment, setComment] = useState("")
   const [saving, setSaving] = useState(false)
@@ -124,9 +262,12 @@ export default function RevisaoDetalhePage() {
         const payload = (res as any).data as ReviewDetail
         setDetail(payload)
 
-        const latestStatus = safeText(payload?.latestReview?.review_status).toUpperCase()
-        if (["GREEN", "YELLOW", "RED"].includes(latestStatus)) {
-          setReviewStatus(latestStatus as any)
+        const latestDecision = mapReviewStatusToDecision(payload?.latestReview?.review_status)
+        const currentFinalStatus = normalizeStatus((payload as any)?.run?.grc_final_status)
+        const derivedFinalStatus = mapDecisionToFinalStatus(latestDecision, normalizeStatus(payload?.run?.execution_status))
+        if (latestDecision) setReviewDecision(latestDecision)
+        if (currentFinalStatus && currentFinalStatus !== derivedFinalStatus && currentFinalStatus !== "REPROVADO") {
+          setManualFinalStatus(currentFinalStatus)
         }
 
         setComment(safeText(payload?.latestReview?.analyst_comment))
@@ -142,13 +283,45 @@ export default function RevisaoDetalhePage() {
     load()
   }, [runId])
 
-  const executionStatus = useMemo(() => safeText(detail?.run?.execution_status).toUpperCase(), [detail])
+  const executionStatus = useMemo(() => normalizeStatus(detail?.run?.execution_status), [detail])
+  const kpiRuleSummary = useMemo(() => (detail?.run ? buildKpiRuleSummary(detail.run) : null), [detail])
+  const reviewFinalStatus = useMemo(() => {
+    if (reviewDecision === "REJECTED") return manualFinalStatus
+    if (manualFinalStatus) return manualFinalStatus
+    return mapDecisionToFinalStatus(reviewDecision, executionStatus)
+  }, [manualFinalStatus, reviewDecision, executionStatus])
+  const isManualOverrideMode = reviewDecision === "REJECTED"
+  const shouldShowReviewFields = reviewDecision === "NEEDS_ADJUSTMENTS" || isManualOverrideMode
 
   async function handleFinalizeReview() {
     if (!detail?.run?.run_id) return
 
-    if (!["GREEN", "YELLOW", "RED"].includes(reviewStatus)) {
-      alert("Selecione o resultado da revisão (Aprovar, Ajuste ou Reprovar).")
+    if (!reviewDecision || !reviewFinalStatus) {
+      if (!manualFinalStatus || !isManualOverrideMode) {
+        alert("Selecione a decisão da revisão ou defina manualmente o resultado final.")
+        return
+      }
+    }
+
+    if (isManualOverrideMode && !manualFinalStatus) {
+      alert("Selecione o resultado final manualmente: Green, Yellow ou Red.")
+      return
+    }
+
+    const decisionToPersist = manualFinalStatus ? mapManualFinalStatusToDecision(reviewFinalStatus) : reviewDecision
+
+    if (!decisionToPersist || !reviewFinalStatus) {
+      alert("Não foi possível determinar a decisão a ser salva.")
+      return
+    }
+
+    if (shouldShowReviewFields && !safeText(reason)) {
+      alert("Selecione o motivo da revisão antes de finalizar.")
+      return
+    }
+
+    if (shouldShowReviewFields && !safeText(comment)) {
+      alert("Preencha os comentários da revisão antes de finalizar.")
       return
     }
 
@@ -156,7 +329,8 @@ export default function RevisaoDetalhePage() {
     try {
       const res = await saveSecurityReviewByRun({
         run_id: detail.run.run_id,
-        review_status: reviewStatus,
+        review_status: decisionToPersist,
+        final_status: reviewFinalStatus,
         analyst_comment: comment || null,
         override_reason: reason || null,
         reviewed_by_email: currentUserEmail,
@@ -180,7 +354,7 @@ export default function RevisaoDetalhePage() {
     <div className="w-full space-y-8 animate-in fade-in duration-500">
       <header className="space-y-3">
         <nav className="flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/revisao" className="hover:text-[#f71866]">Fila de Revisão</Link>
+          <Link href={backHref} className="hover:text-[#f71866]">Fila de Revisão</Link>
           <span>/</span>
           <span className="text-slate-700 font-semibold">Revisar Execução</span>
         </nav>
@@ -190,7 +364,7 @@ export default function RevisaoDetalhePage() {
             <h1 className="text-2xl font-bold text-slate-900">Detalhamento da Revisão</h1>
             <p className="text-slate-500 text-sm mt-1">Validação final da execução registrada e dos planos de ação associados.</p>
           </div>
-          <Link href="/revisao" className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">
+          <Link href={backHref} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">
             <ArrowLeft size={14} /> Voltar
           </Link>
         </div>
@@ -229,6 +403,27 @@ export default function RevisaoDetalhePage() {
                 <div>
                   <p className="text-slate-400 text-[10px] uppercase font-bold">Período</p>
                   <p className="font-semibold text-slate-800 mt-1">{detail.run.period}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-[10px] uppercase font-bold">Meta</p>
+                  <p className="font-semibold text-slate-800 mt-1">{kpiRuleSummary?.targetLabel || "Não configurado"}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-[10px] uppercase font-bold">Direção da Meta</p>
+                  <p className="font-semibold text-slate-800 mt-1">{kpiRuleSummary?.directionLabel || "Não configurado"}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-slate-400 text-[10px] uppercase font-bold">Regra de Avaliação</p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {(kpiRuleSummary?.lines || ["Não configurado"]).map((line) => (
+                      <span
+                        key={line}
+                        className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700"
+                      >
+                        {line}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -310,34 +505,122 @@ export default function RevisaoDetalhePage() {
 
           <div className="lg:col-span-5">
             <div className="bg-white border border-slate-100 rounded-xl p-6 sticky top-8 space-y-5">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Parecer do Analista GRC</div>
+              <div className="space-y-1">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Decisão do Analista GRC</div>
+                <p className="text-xs text-slate-500">
+                  Confirme o resultado apresentado pelo ponto focal, solicite ajuste quando houver inconsistências ou defina manualmente o resultado final quando quiser concluir a análise com outro status.
+                </p>
+              </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setReviewStatus("GREEN")}
-                  className={`px-3 py-2 text-xs font-bold rounded-lg border flex items-center justify-center gap-1 ${reviewStatus === "GREEN" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200"}`}
+                  onClick={() => {
+                    setReviewDecision("APPROVED")
+                    setManualFinalStatus("")
+                  }}
+                  className={`px-3 py-3 text-xs rounded-lg border flex flex-col items-center justify-center gap-1 text-center ${reviewDecision === "APPROVED" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200"}`}
                 >
-                  <ShieldCheck size={14} /> Aprovar
+                  <span className="inline-flex items-center gap-1 font-bold">
+                    <ShieldCheck size={14} /> Confirmar
+                  </span>
+                  <span className="text-[11px] leading-tight">
+                    Mantém {statusLabel(executionStatus)}
+                  </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setReviewStatus("YELLOW")}
-                  className={`px-3 py-2 text-xs font-bold rounded-lg border flex items-center justify-center gap-1 ${reviewStatus === "YELLOW" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-white text-slate-500 border-slate-200"}`}
+                  onClick={() => {
+                    setReviewDecision("NEEDS_ADJUSTMENTS")
+                    setManualFinalStatus("")
+                  }}
+                  className={`px-3 py-3 text-xs rounded-lg border flex flex-col items-center justify-center gap-1 text-center ${reviewDecision === "NEEDS_ADJUSTMENTS" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-white text-slate-500 border-slate-200"}`}
                 >
-                  <Clock3 size={14} /> Ajuste
+                  <span className="inline-flex items-center gap-1 font-bold">
+                    <Clock3 size={14} /> Solicitar ajuste
+                  </span>
+                  <span className="text-[11px] leading-tight">
+                    Resultado final fica Em atenção
+                  </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setReviewStatus("RED")}
-                  className={`px-3 py-2 text-xs font-bold rounded-lg border flex items-center justify-center gap-1 ${reviewStatus === "RED" ? "bg-red-50 text-red-700 border-red-200" : "bg-white text-slate-500 border-slate-200"}`}
+                  onClick={() => {
+                    setReviewDecision("REJECTED")
+                  }}
+                  className={`px-3 py-3 text-xs rounded-lg border flex flex-col items-center justify-center gap-1 text-center ${reviewDecision === "REJECTED" ? "bg-red-50 text-red-700 border-red-200" : "bg-white text-slate-500 border-slate-200"}`}
                 >
-                  <XCircle size={14} /> Reprovar
+                  <span className="inline-flex items-center gap-1 font-bold">
+                    <XCircle size={14} /> Definir resultado
+                  </span>
+                  <span className="text-[11px] leading-tight">
+                    Analista escolhe Green, Yellow ou Red
+                  </span>
                 </button>
               </div>
 
+              {isManualOverrideMode ? (
+              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Definição manual do resultado final</div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Use esta opção quando o analista discordar do status registrado na execução e quiser concluir a revisão sem devolver para ajuste.
+                    </p>
+                  </div>
+                  {manualFinalStatus ? (
+                    <button
+                      type="button"
+                      onClick={() => setManualFinalStatus("")}
+                      className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-[#f71866]"
+                    >
+                      Limpar
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "GREEN", label: "Green", style: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                    { value: "YELLOW", label: "Yellow", style: "bg-amber-50 text-amber-700 border-amber-200" },
+                    { value: "RED", label: "Red", style: "bg-red-50 text-red-700 border-red-200" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setManualFinalStatus(option.value as ReviewFinalStatus)}
+                      className={`px-3 py-3 text-xs rounded-lg border font-bold uppercase tracking-widest transition-all ${
+                        manualFinalStatus === option.value ? option.style : "bg-white text-slate-500 border-slate-200"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {manualFinalStatus ? (
+                  <div className="text-xs text-slate-600">
+                    O resultado final será salvo manualmente como <span className="font-bold">{manualFinalStatus}</span>, prevalecendo sobre o status calculado da execução.
+                  </div>
+                ) : null}
+              </div>
+              ) : null}
+
+              <div className={`rounded-lg border px-4 py-3 ${statusClass(reviewFinalStatus || executionStatus)}`}>
+                <div className="text-[11px] font-bold uppercase tracking-widest opacity-70">Resultado final que será salvo</div>
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold">{statusLabel(reviewFinalStatus)}</span>
+                  <span className="text-[11px] uppercase font-bold">
+                    {reviewFinalStatus || "PENDENTE"}
+                  </span>
+                </div>
+              </div>
+
+              {shouldShowReviewFields ? (
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Motivo (se ajuste/reprovação)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  {isManualOverrideMode ? "Motivo da definição manual" : "Motivo do ajuste"}
+                </label>
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -350,16 +633,25 @@ export default function RevisaoDetalhePage() {
                   <option value="Outro">Outro motivo</option>
                 </select>
               </div>
+              ) : null}
 
+              {shouldShowReviewFields ? (
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Comentários da Revisão</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  {isManualOverrideMode ? "Comentários da definição manual" : "Comentários da revisão"}
+                </label>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-[#f71866] min-h-[120px]"
-                  placeholder="Detalhe os pontos validados na revisão final..."
+                  placeholder={
+                    isManualOverrideMode
+                      ? "Explique por que o resultado final está sendo definido manualmente pelo analista..."
+                      : "Detalhe os pontos que precisam ser ajustados pelo ponto focal..."
+                  }
                 />
               </div>
+              ) : null}
 
               <div className="p-3 bg-blue-50 rounded border border-blue-100 text-[11px] text-blue-700">
                 O registro será salvo em modo append-only na tabela de revisões (`security_reviews`) mantendo histórico auditável.
@@ -385,7 +677,7 @@ export default function RevisaoDetalhePage() {
           className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => {
             setShowSuccessModal(false)
-            router.push("/revisao")
+            router.push(backHref)
           }}
         >
           <div
@@ -406,7 +698,7 @@ export default function RevisaoDetalhePage() {
                 type="button"
                 onClick={() => {
                   setShowSuccessModal(false)
-                  router.push("/revisao")
+                  router.push(backHref)
                 }}
                 className="px-5 py-2 rounded-full bg-teal-700 text-white text-sm font-bold hover:bg-teal-800 transition-colors"
               >

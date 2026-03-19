@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   BarChart,
   Bar,
@@ -23,6 +24,7 @@ import { fetchDashboardData } from "./actions"
 import { getPreviousMonthISO, resolveReferenceMonth } from "@/lib/utils"
 
 type DashboardItem = {
+  kpiRef: string
   code: string
   title: string
   kpi: string
@@ -339,7 +341,7 @@ function StatusCard({
   )
 }
 
-function TableRow({ code, title, kpi, status, risk, owner }: DashboardItem) {
+function TableRow({ kpiRef, code, title, kpi, status, risk, owner, periodo }: DashboardItem) {
   const initials = owner
     .split(" ")
     .filter(Boolean)
@@ -347,6 +349,12 @@ function TableRow({ code, title, kpi, status, risk, owner }: DashboardItem) {
     .join("")
     .slice(0, 2)
     .toUpperCase()
+
+
+  const actionHref =
+    code && kpiRef && periodo
+      ? `/controles/execucao/${encodeURIComponent(code)}?periodo=${encodeURIComponent(periodo)}&kpi=${encodeURIComponent(kpiRef)}`
+      : ""
 
   return (
     <tr className="hover:bg-slate-50/50 transition-colors group">
@@ -376,9 +384,16 @@ function TableRow({ code, title, kpi, status, risk, owner }: DashboardItem) {
         </div>
       </td>
       <td className="py-4 px-8 text-right">
-        <button className="p-2 text-slate-400 hover:text-[#f71866] transition-colors">
+        <Link
+          href={actionHref || "#"}
+          aria-disabled={!actionHref}
+          className={`inline-flex p-2 transition-colors ${
+            actionHref ? "text-slate-400 hover:text-[#f71866]" : "text-slate-300 pointer-events-none"
+          }`}
+          title={actionHref ? `Abrir execução do KPI no período ${periodo}` : "KPI indisponível"}
+        >
           <Eye size={18} />
-        </button>
+        </Link>
       </td>
     </tr>
   )

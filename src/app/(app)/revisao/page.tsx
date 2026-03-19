@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import React, { useEffect, useMemo, useState } from "react"
-import { CalendarDays, Loader2, Search, AlertTriangle, CheckCircle2, Clock3, Clock, ChevronDown, ChevronRight } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
+import { CalendarDays, Loader2, Search, AlertTriangle, CheckCircle2, Clock3, Clock, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react"
 import { fetchRevisaoQueue } from "./actions"
 import { buildMonthOptions, resolveReferenceMonth } from "@/lib/utils"
 
@@ -42,6 +43,8 @@ const MONTHS_PT = [
   "dezembro",
 ]
 
+const PAGE_SIZE = 25
+
 function safeText(v: any) {
   if (v === null || v === undefined) return ""
   return String(v).trim()
@@ -61,6 +64,7 @@ function normalizeExecutionLabel(status: string) {
   if (up === "GREEN") return "GREEN"
   if (up === "YELLOW") return "YELLOW"
   if (up === "RED") return "RED"
+  if (up === "REPROVADO") return "REPROVADO"
   return up || "SEM STATUS"
 }
 
@@ -69,6 +73,7 @@ function getExecutionStatusStyle(status: string) {
   if (up === "GREEN") return { text: "text-emerald-600", icon: <CheckCircle2 size={12} className="text-emerald-500" /> }
   if (up === "YELLOW") return { text: "text-amber-600", icon: <AlertTriangle size={12} className="text-amber-500" /> }
   if (up === "RED") return { text: "text-red-600", icon: <AlertTriangle size={12} className="text-red-500" /> }
+  if (up === "REPROVADO") return { text: "text-red-600", icon: <AlertTriangle size={12} className="text-red-500" /> }
   return { text: "text-slate-500", icon: <Clock size={12} className="text-slate-400" /> }
 }
 
@@ -78,6 +83,7 @@ function getReviewBadgeClass(status: string) {
   if (up === "CONFORME") return "bg-emerald-50 text-emerald-700 border border-emerald-100"
   if (up === "YELLOW") return "bg-amber-50 text-amber-700 border border-amber-100"
   if (up === "RED") return "bg-red-50 text-red-700 border border-red-100"
+  if (up === "REPROVADO") return "bg-red-50 text-red-700 border border-red-100"
   return "bg-[#f71866]/5 text-[#f71866] border border-[#f71866]/15"
 }
 
@@ -91,6 +97,16 @@ function getRiskStyles(risco: string) {
 }
 
 export default function FilaRevisaoPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando fila de revisão...</div>}>
+      <FilaRevisaoContent />
+    </Suspense>
+  )
+}
+
+function FilaRevisaoContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [monthOptions, setMonthOptions] = useState<string[]>([])
   const [selectedMonth, setSelectedMonth] = useState("")
 
@@ -103,11 +119,36 @@ export default function FilaRevisaoPage() {
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState("")
   const [expandedControls, setExpandedControls] = useState<Record<string, boolean>>({})
+  const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
     const opts = buildMonthOptions(2025)
     setMonthOptions(opts)
-    setSelectedMonth(resolveReferenceMonth(opts))
+    const urlMonth = safeText(searchParams.get("periodo") || searchParams.get("period"))
+    const urlSearch = safeText(searchParams.get("q"))
+    const urlFramework = safeText(searchParams.get("framework")) || "Todos"
+    const urlControlId = safeText(searchParams.get("controlId")) || "Todos"
+    const urlQueue = safeText(searchParams.get("fila")) as "Todos" | "Pendentes" | "Revisados"
+    const urlPageRaw = Number(searchParams.get("page") || "1")
+    const urlPage = Number.isFinite(urlPageRaw) && urlPageRaw > 0 ? Math.floor(urlPageRaw) : 1
+    const expandedFromUrl = safeText(searchParams.get("expanded"))
+
+    setSelectedMonth(urlMonth && opts.includes(urlMonth) ? urlMonth : resolveReferenceMonth(opts))
+    setSearchTerm(urlSearch)
+    setFilterFramework(urlFramework)
+    setFilterControlId(urlControlId)
+    setFilterQueue(urlQueue === "Todos" || urlQueue === "Revisados" || urlQueue === "Pendentes" ? urlQueue : "Pendentes")
+    setCurrentPage(urlPage)
+    setExpandedControls(
+      expandedFromUrl
+        ? expandedFromUrl.split(",").reduce<Record<string, boolean>>((acc, key) => {
+            const value = safeText(key)
+            if (value) acc[value] = true
+            return acc
+          }, {})
+        : {}
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -159,6 +200,30 @@ export default function FilaRevisaoPage() {
     loadQueue()
   }, [selectedMonth])
 
+  useEffect(() => {
+    if (!selectedMonth) return
+
+    const sp = new URLSearchParams()
+    sp.set("periodo", selectedMonth)
+    if (searchTerm) sp.set("q", searchTerm)
+    if (filterFramework !== "Todos") sp.set("framework", filterFramework)
+    if (filterControlId !== "Todos") sp.set("controlId", filterControlId)
+    if (filterQueue !== "Pendentes") sp.set("fila", filterQueue)
+    if (currentPage > 1) sp.set("page", String(currentPage))
+
+    const expanded = Object.entries(expandedControls)
+      .filter(([, isOpen]) => isOpen)
+      .map(([id]) => id)
+      .sort()
+    if (expanded.length > 0) sp.set("expanded", expanded.join(","))
+
+    router.replace(`/revisao?${sp.toString()}`)
+  }, [selectedMonth, searchTerm, filterFramework, filterControlId, filterQueue, currentPage, expandedControls, router])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedMonth, searchTerm, filterFramework, filterControlId, filterQueue])
+
   const frameworkOptions = useMemo(() => {
     return Array.from(new Set(rows.map((r) => safeText(r.framework)).filter(Boolean))).sort((a, b) => a.localeCompare(b))
   }, [rows])
@@ -184,7 +249,7 @@ export default function FilaRevisaoPage() {
       const matchesFramework = filterFramework === "Todos" || item.framework === filterFramework
       const matchesControlId = filterControlId === "Todos" || item.id_control === filterControlId
 
-      const isReviewed = ["GREEN", "YELLOW", "RED"].includes(item.grc_final_status.toUpperCase())
+      const isReviewed = ["GREEN", "YELLOW", "RED", "REPROVADO"].includes(item.grc_final_status.toUpperCase())
       const matchesQueue =
         filterQueue === "Todos" ||
         (filterQueue === "Pendentes" && !isReviewed) ||
@@ -195,7 +260,7 @@ export default function FilaRevisaoPage() {
   }, [rows, searchTerm, filterFramework, filterControlId, filterQueue])
 
   const pendingCount = useMemo(
-    () => rows.filter((r) => !["GREEN", "YELLOW", "RED"].includes(safeText(r.grc_final_status).toUpperCase())).length,
+    () => rows.filter((r) => !["GREEN", "YELLOW", "RED", "REPROVADO"].includes(safeText(r.grc_final_status).toUpperCase())).length,
     [rows]
   )
   const reviewedCount = rows.length - pendingCount
@@ -219,13 +284,15 @@ export default function FilaRevisaoPage() {
         const redCount = group.items.filter((i) => safeText(i.execution_status).toUpperCase() === "RED").length
         const total = group.items.length
 
-        const hasPendingReview = group.items.some((i) => !["GREEN", "YELLOW", "RED"].includes(safeText(i.grc_final_status).toUpperCase()))
+        const hasPendingReview = group.items.some((i) => !["GREEN", "YELLOW", "RED", "REPROVADO"].includes(safeText(i.grc_final_status).toUpperCase()))
+        const hasRejectedReview = group.items.some((i) => safeText(i.grc_final_status).toUpperCase() === "REPROVADO")
         const hasRedReview = group.items.some((i) => safeText(i.grc_final_status).toUpperCase() === "RED")
         const hasYellowReview = group.items.some((i) => safeText(i.grc_final_status).toUpperCase() === "YELLOW")
         const greenReviewedCount = group.items.filter((i) => safeText(i.grc_final_status).toUpperCase() === "GREEN").length
 
         let reviewStatus = "PENDENTE"
-        if (hasRedReview) reviewStatus = "RED"
+        if (hasRejectedReview) reviewStatus = "REPROVADO"
+        else if (hasRedReview) reviewStatus = "RED"
         else if (hasYellowReview) reviewStatus = "YELLOW"
         else if (greenReviewedCount === group.items.length && group.items.length > 0) reviewStatus = "CONFORME"
         else if (hasPendingReview) reviewStatus = "PENDENTE"
@@ -247,6 +314,22 @@ export default function FilaRevisaoPage() {
       })
       .sort((a, b) => safeText(a.base.id_control).localeCompare(safeText(b.base.id_control)))
   }, [filteredRows])
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(groupedControls.length / PAGE_SIZE)), [groupedControls.length])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const paginatedGroupedControls = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return groupedControls.slice(start, start + PAGE_SIZE)
+  }, [groupedControls, currentPage])
+
+  const pageStart = groupedControls.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1
+  const pageEnd = Math.min(currentPage * PAGE_SIZE, groupedControls.length)
 
   function toggleControlExpand(idControl: string) {
     setExpandedControls((prev) => ({ ...prev, [idControl]: !prev[idControl] }))
@@ -338,6 +421,7 @@ export default function FilaRevisaoPage() {
               setFilterControlId("Todos")
               setFilterQueue("Pendentes")
               setSelectedMonth(resolveReferenceMonth(monthOptions))
+              setCurrentPage(1)
             }}
             className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-[#f71866] transition-colors"
           >
@@ -370,8 +454,8 @@ export default function FilaRevisaoPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {groupedControls.length > 0 ? (
-                  groupedControls.map((group) => {
+                {paginatedGroupedControls.length > 0 ? (
+                  paginatedGroupedControls.map((group) => {
                     const item = group.base
                     const isExpanded = Boolean(expandedControls[item.id_control])
                     const execStyle = getExecutionStatusStyle(group.executionStatus)
@@ -484,7 +568,7 @@ export default function FilaRevisaoPage() {
                                           </td>
                                           <td className="px-4 py-3 text-center">
                                             <Link
-                                              href={`/revisao/${encodeURIComponent(kpi.run_id)}`}
+                                              href={`/revisao/${encodeURIComponent(kpi.run_id)}?${searchParams.toString()}`}
                                               className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold text-[#f71866] border border-[#f71866]/20 hover:bg-[#f71866]/5 rounded uppercase tracking-widest"
                                             >
                                               Revisar
@@ -511,6 +595,48 @@ export default function FilaRevisaoPage() {
                 )}
               </tbody>
             </table>
+
+            {!loading && !errorMsg && groupedControls.length > 0 ? (
+              <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-6 py-4 md:flex-row md:items-center md:justify-between">
+                <div className="text-xs text-slate-500 font-medium">
+                  Mostrando <span className="font-bold text-slate-700">{pageStart}</span> a{" "}
+                  <span className="font-bold text-slate-700">{pageEnd}</span> de{" "}
+                  <span className="font-bold text-slate-700">{groupedControls.length}</span> controles na fila
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    disabled={currentPage === 1}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+                      currentPage === 1
+                        ? "cursor-not-allowed border-slate-200 text-slate-300"
+                        : "border-slate-200 text-slate-600 hover:bg-white hover:text-[#f71866]"
+                    }`}
+                  >
+                    <ChevronLeft size={14} />
+                    Anterior
+                  </button>
+
+                  <div className="px-3 py-2 text-xs font-bold text-slate-600">
+                    Página {currentPage} de {totalPages}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+                      currentPage === totalPages
+                        ? "cursor-not-allowed border-slate-200 text-slate-300"
+                        : "border-slate-200 text-slate-600 hover:bg-white hover:text-[#f71866]"
+                    }`}
+                  >
+                    Próxima
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

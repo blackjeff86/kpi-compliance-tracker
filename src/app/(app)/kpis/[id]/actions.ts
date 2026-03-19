@@ -25,6 +25,15 @@ const DEFAULT_RULES: AdminKpiRules = {
  */
 export type KpiEvaluationMode = "UP" | "DOWN" | "BOOLEAN"
 
+type KpiLatestReview = {
+  execution_status: string | null
+  grc_final_status: string | null
+  grc_review_comment: string | null
+  grc_reviewed_at: string | null
+  grc_reviewed_by_email: string | null
+  review_status: string | null
+}
+
 /** Utils (não exportar) */
 function safeText(v: any) {
   if (v === null || v === undefined) return null
@@ -234,6 +243,39 @@ export async function fetchKpiDetail(kpiRef: string) {
 
     const kpiUuid = detail?.kpi_uuid ? String(detail.kpi_uuid) : null
     const { rules, warning } = await fetchRulesForKpi(kpiUuid)
+    const latestReviewRows = kpiUuid
+      ? await sql`
+          SELECT
+            kr.status::text AS execution_status,
+            COALESCE(
+              NULLIF(TRIM(kr.grc_final_status), ''),
+              CASE
+                WHEN sr.review_status::text = 'REJECTED' THEN 'REPROVADO'
+                ELSE COALESCE(
+                  sr.override_status::text,
+                  CASE
+                    WHEN sr.review_status::text = 'APPROVED' THEN 'GREEN'
+                    WHEN sr.review_status::text = 'NEEDS_ADJUSTMENTS' THEN 'YELLOW'
+                    ELSE NULL
+                  END
+                )
+              END
+            ) AS grc_final_status,
+            COALESCE(NULLIF(TRIM(kr.grc_review_comment), ''), sr.analyst_comment) AS grc_review_comment,
+            COALESCE(kr.grc_reviewed_at::text, sr.reviewed_at::text) AS grc_reviewed_at,
+            COALESCE(NULLIF(TRIM(kr.grc_reviewed_by_email), ''), sr.reviewed_by_email) AS grc_reviewed_by_email,
+            sr.review_status::text AS review_status
+          FROM kpi_runs kr
+          LEFT JOIN security_reviews sr
+            ON sr.run_id = kr.id
+            AND sr.is_latest = TRUE
+          WHERE kr.kpi_uuid = (${kpiUuid})::uuid
+            AND kr.is_latest = TRUE
+          ORDER BY kr.updated_at DESC NULLS LAST, kr.created_at DESC NULLS LAST
+          LIMIT 1
+        `
+      : []
+    const latestReview = (latestReviewRows?.[0] || null) as KpiLatestReview | null
 
     return {
       success: true as const,
@@ -261,6 +303,7 @@ export async function fetchKpiDetail(kpiRef: string) {
           focal_point_name: detail.focal_point_name ?? null,
         },
         rules,
+        latestReview,
       },
       ...(warning ? { warning } : {}),
     }

@@ -2,19 +2,62 @@
 
 import sql from "@/lib/db"
 
+type AdminKpiRules = {
+  yellow_ratio: number
+  zero_meta_yellow_max: number
+}
+
+const DEFAULT_RULES: AdminKpiRules = {
+  yellow_ratio: 0.9,
+  zero_meta_yellow_max: 1,
+}
+
 function safeText(v: any) {
   if (v === null || v === undefined) return ""
   return String(v).trim()
 }
 
-function normalizeGrcFinalStatus(v: any): "GREEN" | "YELLOW" | "RED" | null {
+function safeNumber(v: any): number | null {
+  if (v === null || v === undefined) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+function normalizeRules(input: any): AdminKpiRules {
+  const yellow_ratio = safeNumber(input?.yellow_ratio)
+  const zero_meta_yellow_max = safeNumber(input?.zero_meta_yellow_max)
+
+  return {
+    yellow_ratio: clamp(yellow_ratio ?? DEFAULT_RULES.yellow_ratio, 0.01, 0.999),
+    zero_meta_yellow_max: clamp(zero_meta_yellow_max ?? DEFAULT_RULES.zero_meta_yellow_max, 0, 999999),
+  }
+}
+
+function normalizeMode(v: any): "UP" | "DOWN" | "BOOLEAN" {
+  const up = safeText(v).toUpperCase()
+  if (up === "UP" || up === "DOWN" || up === "BOOLEAN") return up
+  return "UP"
+}
+
+function normalizeGrcFinalStatus(v: any): "GREEN" | "YELLOW" | "RED" | "REPROVADO" | null {
   const up = safeText(v).toUpperCase()
   if (!up) return null
-  if (up === "GREEN" || up === "YELLOW" || up === "RED") return up
+  if (up === "GREEN" || up === "YELLOW" || up === "RED" || up === "REPROVADO") return up
   return null
 }
 
-function mapFinalStatusToReviewStatus(finalStatus: "GREEN" | "YELLOW" | "RED") {
+function normalizeReviewDecision(v: any): "APPROVED" | "NEEDS_ADJUSTMENTS" | "REJECTED" | null {
+  const up = safeText(v).toUpperCase()
+  if (!up) return null
+  if (up === "APPROVED" || up === "NEEDS_ADJUSTMENTS" || up === "REJECTED") return up
+  return null
+}
+
+function mapFinalStatusToReviewStatus(finalStatus: "GREEN" | "YELLOW" | "RED" | "REPROVADO") {
   if (finalStatus === "GREEN") return "APPROVED"
   if (finalStatus === "YELLOW") return "NEEDS_ADJUSTMENTS"
   return "REJECTED"
@@ -23,6 +66,37 @@ function mapFinalStatusToReviewStatus(finalStatus: "GREEN" | "YELLOW" | "RED") {
 function isUuidLike(v: any) {
   const s = safeText(v)
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
+
+async function fetchRulesForKpi(kpiUuid: string | null): Promise<{ rules: AdminKpiRules; raw: any | null }> {
+  try {
+    if (kpiUuid) {
+      const key = `kpi_rules:${kpiUuid}`
+      const r1 = await sql`
+        SELECT value_json
+        FROM admin_settings
+        WHERE key = ${key}
+        LIMIT 1
+      `
+      if (r1?.length) {
+        return { rules: normalizeRules(r1[0]?.value_json), raw: r1[0]?.value_json || null }
+      }
+    }
+
+    const r2 = await sql`
+      SELECT value_json
+      FROM admin_settings
+      WHERE key = 'kpi_rules'
+      LIMIT 1
+    `
+    if (r2?.length) {
+      return { rules: normalizeRules(r2[0]?.value_json), raw: r2[0]?.value_json || null }
+    }
+
+    return { rules: DEFAULT_RULES, raw: null }
+  } catch {
+    return { rules: DEFAULT_RULES, raw: null }
+  }
 }
 
 export async function fetchRevisaoQueue(params: {
@@ -59,16 +133,18 @@ export async function fetchRevisaoQueue(params: {
           sr.run_id::text AS run_id,
           UPPER(
             TRIM(
-              COALESCE(
-                sr.override_status::text,
-                CASE
-                  WHEN sr.review_status::text = 'APPROVED' THEN 'GREEN'
-                  WHEN sr.review_status::text = 'NEEDS_ADJUSTMENTS' THEN 'YELLOW'
-                  WHEN sr.review_status::text = 'REJECTED' THEN 'RED'
-                  ELSE NULL
-                END,
-                ''
-              )
+              CASE
+                WHEN sr.review_status::text = 'REJECTED' THEN 'REPROVADO'
+                ELSE COALESCE(
+                  sr.override_status::text,
+                  CASE
+                    WHEN sr.review_status::text = 'APPROVED' THEN 'GREEN'
+                    WHEN sr.review_status::text = 'NEEDS_ADJUSTMENTS' THEN 'YELLOW'
+                    ELSE NULL
+                  END,
+                  ''
+                )
+              END
             )
           ) AS grc_final_status,
           COALESCE(sr.analyst_comment, '') AS grc_review_comment,
@@ -191,7 +267,9 @@ export async function fetchReviewDetail(runIdRaw: string) {
         COALESCE(c.focal_point_name, 'Não atribuído') AS focal_point_name,
         COALESCE(ck.kpi_id, '') AS kpi_id,
         COALESCE(ck.kpi_name, ck.kpi_id, kr.kpi_code, 'KPI não identificado') AS kpi_name,
-        COALESCE(ck.kpi_target, '') AS kpi_target
+        COALESCE(ck.kpi_target, '') AS kpi_target,
+        COALESCE(ck.kpi_evaluation_mode, 'UP') AS kpi_evaluation_mode,
+        COALESCE(kr.grc_final_status, '') AS grc_final_status
       FROM kpi_runs kr
       LEFT JOIN control_kpis ck ON ck.kpi_uuid = kr.kpi_uuid
       LEFT JOIN controls c ON c.id_control = ck.id_control
@@ -199,6 +277,9 @@ export async function fetchReviewDetail(runIdRaw: string) {
       LIMIT 1
     `
     if (!runRows?.length) return { success: false as const, error: "Execução não encontrada." }
+
+    const kpiUuid = safeText(runRows[0]?.kpi_uuid)
+    const { rules, raw } = await fetchRulesForKpi(kpiUuid)
 
     const reviewRows = await sql`
       SELECT
@@ -242,7 +323,12 @@ export async function fetchReviewDetail(runIdRaw: string) {
     return {
       success: true as const,
       data: {
-        run: runRows[0],
+        run: {
+          ...runRows[0],
+          kpi_evaluation_mode: normalizeMode(runRows[0]?.kpi_evaluation_mode),
+          kpi_rules: rules,
+          kpi_rules_raw: raw,
+        },
         latestReview,
         reviewHistory: reviewRows || [],
         actionPlans: actionPlans || [],
@@ -256,23 +342,28 @@ export async function fetchReviewDetail(runIdRaw: string) {
 
 export async function saveSecurityReviewByRun(input: {
   run_id: string
-  review_status: string
+  review_status?: string
+  final_status?: string
   analyst_comment?: string | null
   override_reason?: string | null
   reviewed_by_email?: string | null
 }) {
   try {
     const runId = safeText(input.run_id)
-    const finalStatus = normalizeGrcFinalStatus(input.review_status)
+    const finalStatus = normalizeGrcFinalStatus(input.final_status || input.review_status)
     const analystComment = safeText(input.analyst_comment) || null
     const overrideReason = safeText(input.override_reason) || null
     const reviewedBy = safeText(input.reviewed_by_email) || "grc.analyst@local"
 
     if (!isUuidLike(runId)) return { success: false as const, error: "run_id inválido." }
-    if (!finalStatus) return { success: false as const, error: "Status de revisão inválido. Use GREEN, YELLOW ou RED." }
+    if (!finalStatus) return { success: false as const, error: "Status de revisão inválido. Use GREEN, YELLOW, RED ou REPROVADO." }
+    if (finalStatus === "REPROVADO" && !analystComment) {
+      return { success: false as const, error: "Informe nos comentários o motivo da reprovação." }
+    }
 
-    const finalStatusSafe = finalStatus as "GREEN" | "YELLOW" | "RED"
-    const reviewStatus = mapFinalStatusToReviewStatus(finalStatusSafe)
+    const finalStatusSafe = finalStatus as "GREEN" | "YELLOW" | "RED" | "REPROVADO"
+    const reviewStatus = normalizeReviewDecision(input.review_status) || mapFinalStatusToReviewStatus(finalStatusSafe)
+    const overrideStatusForReview = finalStatusSafe === "REPROVADO" ? "RED" : finalStatusSafe
 
     const runRows = await sql`
       SELECT id::text AS run_id
@@ -304,7 +395,7 @@ export async function saveSecurityReviewByRun(input: {
         (${runId})::uuid,
         ${reviewStatus},
         ${analystComment},
-        ${finalStatusSafe},
+        ${overrideStatusForReview},
         ${overrideReason},
         ${reviewedBy},
         now(),
@@ -312,6 +403,17 @@ export async function saveSecurityReviewByRun(input: {
         TRUE
       )
       RETURNING *
+    `
+
+    await sql`
+      UPDATE kpi_runs
+      SET
+        grc_final_status = ${finalStatusSafe},
+        grc_review_comment = ${analystComment},
+        grc_reviewed_at = now(),
+        grc_reviewed_by_email = ${reviewedBy},
+        updated_at = now()
+      WHERE id = (${runId})::uuid
     `
 
     return { success: true as const, data: insertedReview?.[0] || null }
@@ -352,7 +454,7 @@ export async function saveGrcFinalReview(input: {
 
     return saveSecurityReviewByRun({
       run_id: safeText(runRows[0]?.run_id),
-      review_status: input.final_status,
+      final_status: input.final_status,
       analyst_comment: input.review_comment || null,
       reviewed_by_email: input.reviewed_by_email || null,
     })

@@ -391,16 +391,18 @@ export async function fetchControles(params?: { period?: string }) {
           sr.run_id::text AS run_id,
           UPPER(
             TRIM(
-              COALESCE(
-                sr.override_status::text,
-                CASE
-                  WHEN sr.review_status::text = 'APPROVED' THEN 'GREEN'
-                  WHEN sr.review_status::text = 'NEEDS_ADJUSTMENTS' THEN 'YELLOW'
-                  WHEN sr.review_status::text = 'REJECTED' THEN 'RED'
-                  ELSE NULL
-                END,
-                ''
-              )
+              CASE
+                WHEN sr.review_status::text = 'REJECTED' THEN 'REPROVADO'
+                ELSE COALESCE(
+                  sr.override_status::text,
+                  CASE
+                    WHEN sr.review_status::text = 'APPROVED' THEN 'GREEN'
+                    WHEN sr.review_status::text = 'NEEDS_ADJUSTMENTS' THEN 'YELLOW'
+                    ELSE NULL
+                  END,
+                  ''
+                )
+              END
             )
           ) AS grc_final_status
         FROM security_reviews sr
@@ -429,7 +431,8 @@ export async function fetchControles(params?: { period?: string }) {
           COUNT(*) FILTER (WHERE rp.status IS NOT NULL AND COALESCE(rp.grc_final_status, '') = '')::int AS grc_pending_count,
           COUNT(*) FILTER (WHERE rp.grc_final_status = 'GREEN')::int AS grc_green_count,
           COUNT(*) FILTER (WHERE rp.grc_final_status = 'YELLOW')::int AS grc_yellow_count,
-          COUNT(*) FILTER (WHERE rp.grc_final_status = 'RED')::int AS grc_red_count
+          COUNT(*) FILTER (WHERE rp.grc_final_status = 'REPROVADO')::int AS grc_reprovado_count,
+          COUNT(*) FILTER (WHERE rp.grc_final_status IN ('RED', 'REPROVADO'))::int AS grc_red_count
         FROM runs_period rp
         GROUP BY rp.id_control
       )
@@ -444,6 +447,7 @@ export async function fetchControles(params?: { period?: string }) {
         COALESCE(a.grc_pending_count, 0) AS grc_pending_count,
         COALESCE(a.grc_green_count, 0) AS grc_green_count,
         COALESCE(a.grc_yellow_count, 0) AS grc_yellow_count,
+        COALESCE(a.grc_reprovado_count, 0) AS grc_reprovado_count,
         COALESCE(a.grc_red_count, 0) AS grc_red_count,
 
         CASE
@@ -495,6 +499,7 @@ export async function fetchControles(params?: { period?: string }) {
           ) THEN 'NÃO APLICÁVEL'
 
           -- mensal (ou qualquer outro default): segue regra atual
+          WHEN COALESCE(a.grc_reprovado_count, 0) > 0 THEN 'REPROVADO'
           WHEN COALESCE(kt.exec_total, 0) = 0 THEN 'EM ABERTO'
           WHEN COALESCE(a.exec_done, 0) < COALESCE(kt.exec_total, 0) THEN 'EM ABERTO'
           WHEN COALESCE(a.red_count, 0) > 0 THEN 'NÃO CONFORME'

@@ -48,6 +48,20 @@ type KpiDetail = {
   focal_point_name: string | null
 }
 
+type KpiLatestReview = {
+  execution_status: string | null
+  grc_final_status: string | null
+  grc_review_comment: string | null
+  grc_reviewed_at: string | null
+  grc_reviewed_by_email: string | null
+  review_status: string | null
+}
+
+function safeText(v: any) {
+  if (v === null || v === undefined) return ""
+  return String(v).trim()
+}
+
 function safeNumber(v: any): number | null {
   const n = Number(v)
   return Number.isFinite(n) ? n : null
@@ -74,6 +88,29 @@ function modeLabel(mode: KpiEvaluationMode) {
 function isTrueLike(v: any) {
   const s = String(v ?? "").trim().toLowerCase()
   return s === "true" || s === "1" || s === "sim" || s === "yes" || s === "ok"
+}
+
+function formatDateTime(v: any) {
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return "N/A"
+  return d.toLocaleString("pt-BR")
+}
+
+function getReviewBadgeClass(status: string) {
+  const up = safeText(status).toUpperCase()
+  if (up === "GREEN" || up === "CONFORME") return "bg-emerald-50 text-emerald-700 border-emerald-100"
+  if (up === "YELLOW" || up.includes("ATEN")) return "bg-amber-50 text-amber-700 border-amber-100"
+  if (up === "RED" || up === "REPROVADO" || up.includes("NÃO CONFORME") || up.includes("NAO CONFORME")) return "bg-red-50 text-red-700 border-red-100"
+  return "bg-slate-50 text-slate-600 border-slate-100"
+}
+
+function reviewStatusLabel(status: string) {
+  const up = safeText(status).toUpperCase()
+  if (up === "GREEN") return "Conforme"
+  if (up === "YELLOW") return "Em atenção"
+  if (up === "RED") return "Não conforme"
+  if (up === "REPROVADO") return "Reprovado"
+  return "Sem revisão"
 }
 
 export default function KpiDetailPage() {
@@ -103,6 +140,7 @@ function KpiDetailPageContent() {
   const [okMsg, setOkMsg] = useState<string | null>(null)
 
   const [detail, setDetail] = useState<KpiDetail | null>(null)
+  const [latestReview, setLatestReview] = useState<KpiLatestReview | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -129,6 +167,7 @@ function KpiDetailPageContent() {
         }
 
         setDetail(res.data.detail)
+        setLatestReview(res.data.latestReview || null)
         setMode(res.data.detail.kpi_evaluation_mode ?? "UP")
         setKpiTarget(res.data.detail.kpi_target ?? "0")
         setRules(res.data.rules)
@@ -368,6 +407,34 @@ function KpiDetailPageContent() {
               <InfoRow icon={<User size={14} />} label="Ponto Focal" value={detail.focal_point_name || "—"} />
             </div>
           </Card>
+
+          {latestReview?.grc_final_status ? (
+            <Card title="Última Revisão GRC" subtitle="Motivo mais recente registrado pelo analista para este KPI.">
+              <div className="space-y-4">
+                <InfoRow
+                  icon={<ShieldCheck size={14} />}
+                  label="Status final"
+                  value={
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${getReviewBadgeClass(latestReview.grc_final_status || "")}`}>
+                      {reviewStatusLabel(latestReview.grc_final_status || "")}
+                    </span>
+                  }
+                />
+                <InfoRow icon={<Tag size={14} />} label="Status calculado" value={safeText(latestReview.execution_status) || "—"} />
+                <InfoRow icon={<User size={14} />} label="Revisado por" value={safeText(latestReview.grc_reviewed_by_email) || "—"} />
+                <InfoRow icon={<FileText size={14} />} label="Data da revisão" value={formatDateTime(latestReview.grc_reviewed_at)} />
+
+                {safeText(latestReview.grc_review_comment) ? (
+                  <div className={`rounded-xl border p-4 ${getReviewBadgeClass(latestReview.grc_final_status || "")}`}>
+                    <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">Comentário do analista GRC</div>
+                    <div className="mt-2 text-sm font-medium leading-relaxed">
+                      {latestReview.grc_review_comment}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
         </div>
       </div>
 

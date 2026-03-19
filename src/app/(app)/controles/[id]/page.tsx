@@ -129,7 +129,7 @@ function statusLooksPending(status: string) {
 
 function statusLooksRed(status: string) {
   const s = safeText(status).toLowerCase()
-  return s.includes("red") || s.includes("crit") || s.includes("crít")
+  return s.includes("reprov") || s.includes("red") || s.includes("crit") || s.includes("crít")
 }
 
 export default function DetalheControlePage() {
@@ -559,6 +559,7 @@ function DetalheControlePageContent() {
                       const hasRun = !!safeText(runStatusRaw)
                       const valueToShow = hasRun ? safeText(runStatusRaw) : "PEND."
                       const metaToShow = `Meta: ${safeText(kpi.target) || "0"}`
+                      const isRejectedByGrc = safeText(runStatusRaw).toUpperCase() === "REPROVADO"
 
                       const left = kpi.kpi_id_text || "KPI"
                       const right = kpi.kpi_name ? ` | ${kpi.kpi_name}` : ""
@@ -591,6 +592,7 @@ function DetalheControlePageContent() {
                             irParaExecucao(kpi.kpi_uuid)
                           }}
                           showPendingIcon={!hasRun}
+                          showRejectedAlert={isRejectedByGrc}
                         />
                       )
                     })
@@ -1049,30 +1051,44 @@ function InfoCard({ icon, label, value }: any) {
   )
 }
 
-function KPIItem({ title, desc, value, meta, status, onRegister, disabled, showPendingIcon }: any) {
-  const statusClass =
-    status === "success"
-      ? "text-emerald-500 text-lg"
+function KPIItem({ title, desc, value, meta, status, onRegister, disabled, showPendingIcon, showRejectedAlert }: any) {
+  const statusTone =
+    showRejectedAlert
+      ? "bg-red-50 text-red-600 border-red-100"
+      : status === "success"
+      ? "bg-emerald-50 text-emerald-600 border-emerald-100"
       : status === "pending"
-      ? "text-[#f71866] text-sm uppercase tracking-widest font-black"
+      ? "bg-[#f71866]/5 text-[#f71866] border-[#f71866]/15"
       : status === "warning"
-      ? "text-amber-600 text-lg"
-      : "text-slate-600 text-lg"
+      ? "bg-amber-50 text-amber-600 border-amber-100"
+      : "bg-slate-50 text-slate-600 border-slate-100"
 
   return (
     <div className="bg-white p-6 rounded-xl border transition-all flex items-center justify-between border-slate-100 shadow-sm hover:border-[#f71866]/20">
       <div className="flex flex-col gap-1.5">
-        <h3 className="font-semibold text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">{title}</h3>
+        <h3 className="font-semibold text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">
+          {title}
+          {showRejectedAlert ? (
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-50 text-red-500 border border-red-100"
+              title="KPI reprovado pelo analista GRC neste mês de referência"
+            >
+              <AlertCircle size={12} />
+            </span>
+          ) : null}
+        </h3>
         <p className="text-[11px] text-slate-500 font-medium max-w-sm leading-relaxed">{desc}</p>
       </div>
 
       <div className="flex items-center gap-10">
         <div className="text-right">
-          <div className={`font-semibold tracking-tight flex items-center justify-end gap-1.5 ${statusClass}`}>
-            {showPendingIcon ? <AlertCircle size={14} className="text-[#f71866]" /> : null}
-            {value}
+          <div className="flex items-center justify-end">
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] ${statusTone}`}>
+              {showPendingIcon ? <AlertCircle size={12} className="text-[#f71866]" /> : null}
+              {value}
+            </span>
           </div>
-          <div className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-1">{meta}</div>
+          <div className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-2">{meta}</div>
         </div>
 
         {onRegister && (

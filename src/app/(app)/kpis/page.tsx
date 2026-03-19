@@ -32,6 +32,8 @@ type KPIRecord = {
   atual: string
   status: string
   corStatus: string
+  grc_final_status: string
+  grc_review_comment: string
 }
 
 function safeText(v: any) {
@@ -100,6 +102,7 @@ function formatPeriodoLabel(periodoISO: string) {
 function mapRunStatusToUi(statusRaw: any): { label: string; dot: string; text: string } {
   const s = String(statusRaw || "").trim().toUpperCase()
 
+  if (s.includes("REPROVADO")) return { label: "Reprovado", dot: "bg-red-500", text: "text-red-600" }
   if (s.includes("GREEN")) return { label: "Green", dot: "bg-emerald-500", text: "text-emerald-600" }
   if (s.includes("RED")) return { label: "Red", dot: "bg-red-500", text: "text-red-600" }
   if (s.includes("YELLOW")) return { label: "Yellow", dot: "bg-amber-500", text: "text-amber-600" }
@@ -288,9 +291,10 @@ function KPIsPageContent() {
           const run = kpi_uuid ? runMap[kpi_uuid] : undefined
           const measuredValue = run?.measured_value ?? null
           const runStatus = run?.status ?? ""
+          const grcFinalStatus = String(run?.grc_final_status || "").trim()
 
           const atual = measuredValue === null ? "-" : toPercentLabel(measuredValue)
-          const uiStatus = mapRunStatusToUi(runStatus)
+          const uiStatus = mapRunStatusToUi(grcFinalStatus || runStatus)
 
           return {
             id: id || `KPI-${Math.random().toString(16).slice(2)}`,
@@ -302,6 +306,8 @@ function KPIsPageContent() {
             atual,
             status: uiStatus.label,
             corStatus: uiStatus.dot,
+            grc_final_status: grcFinalStatus,
+            grc_review_comment: String(run?.grc_review_comment || "").trim(),
           }
         })
 

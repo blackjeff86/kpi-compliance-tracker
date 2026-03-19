@@ -24,6 +24,7 @@ type DashboardResult =
           red: number
         }>
         immediateItems: Array<{
+          kpiRef: string
           code: string
           title: string
           kpi: string
@@ -184,6 +185,7 @@ export async function fetchDashboardData(params?: {
             ORDER BY kr.kpi_uuid, kr.is_latest DESC NULLS LAST, kr.updated_at DESC NULLS LAST, kr.created_at DESC NULLS LAST
           )
           SELECT
+            COALESCE(ck.kpi_uuid::text, ck.kpi_id, ck.kpi_name) AS kpi_ref,
             c.id_control AS code,
             c.name_control AS title,
             COALESCE(ck.kpi_name, ck.kpi_id, lr.kpi_code, 'KPI não identificado') AS kpi,
@@ -205,6 +207,7 @@ export async function fetchDashboardData(params?: {
       : []
 
     const immediateItems = immediateRows.map((row) => ({
+      kpiRef: safeText(row.kpi_ref),
       code: safeText(row.code),
       title: safeText(row.title),
       kpi: safeText(row.kpi),

@@ -44,7 +44,7 @@ interface Controle {
   green_count: number
   yellow_count: number
   red_count: number
-  status_final: "EM ABERTO" | "CONFORME" | "EM ATENÇÃO" | "NÃO CONFORME" | "NÃO APLICÁVEL" | string
+  status_final: "EM ABERTO" | "CONFORME" | "EM ATENÇÃO" | "NÃO CONFORME" | "REPROVADO" | "NÃO APLICÁVEL" | string
   grc_final_status: "GREEN" | "YELLOW" | "RED" | "PENDENTE" | "SEM EXECUÇÃO" | "NÃO APLICÁVEL" | string
 }
 
@@ -342,6 +342,7 @@ function ControlesPageContent() {
     if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return "Não aplicável"
     if (up.includes("EM ABERTO") || up.includes("PENDENTE") || up.includes("SEM EXEC")) return "Pendente"
     if (up.includes("CONFORME") && !up.includes("NÃO") && !up.includes("NAO")) return "Conforme"
+    if (up.includes("REPROV")) return "Reprovado"
     if (up.includes("NÃO CONFORME") || up.includes("NAO CONFORME") || up === "RED") return "Não conforme"
     if (up.includes("ATEN") || up === "YELLOW") return "Em atenção"
     return "Em atenção"
@@ -350,7 +351,7 @@ function ControlesPageContent() {
   const getFinalStatusStyle = (s: string) => {
     const label = normalizeControlStatusLabel(s)
     if (label === "Conforme") return { text: "text-emerald-600", dot: "bg-emerald-500" }
-    if (label === "Não conforme") return { text: "text-red-600", dot: "bg-red-500" }
+    if (label === "Não conforme" || label === "Reprovado") return { text: "text-red-600", dot: "bg-red-500" }
     if (label === "Pendente") return { text: "text-slate-600", dot: "bg-slate-400" }
     if (label === "Não aplicável") return { text: "text-slate-500", dot: "bg-slate-300" }
     return { text: "text-amber-600", dot: "bg-amber-500" }
@@ -359,7 +360,7 @@ function ControlesPageContent() {
   const pickStatusIcon = (s: string) => {
     const label = normalizeControlStatusLabel(s)
     if (label === "Conforme") return <CheckCircle2 size={12} className="text-emerald-500" />
-    if (label === "Não conforme") return <AlertTriangle size={12} className="text-red-500" />
+    if (label === "Não conforme" || label === "Reprovado") return <AlertTriangle size={12} className="text-red-500" />
     if (label === "Pendente" || label === "Não aplicável") return <Clock size={12} className="text-slate-500" />
     return <Clock size={12} className="text-amber-500" />
   }
@@ -371,6 +372,7 @@ function ControlesPageContent() {
     if (up === "YELLOW") return "bg-amber-50 text-amber-700 border-amber-100"
     if (up.includes("ATEN")) return "bg-amber-50 text-amber-700 border-amber-100"
     if (up === "RED") return "bg-red-50 text-red-700 border-red-100"
+    if (up.includes("REPROV")) return "bg-red-50 text-red-700 border-red-100"
     if (up.includes("NÃO CONFORME") || up.includes("NAO CONFORME")) return "bg-red-50 text-red-700 border-red-100"
     if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return "bg-slate-50 text-slate-500 border-slate-200"
     if (up.includes("SEM EXEC")) return "bg-slate-50 text-slate-500 border-slate-200"
