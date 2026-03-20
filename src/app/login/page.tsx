@@ -32,7 +32,11 @@ export default function LoginPage() {
 
   async function handleGoogleSSO() {
     setLoadingSSO(true)
-    await signIn("google", { callbackUrl: "/dashboard" })
+    await signIn(
+      "google",
+      { callbackUrl: "/dashboard" },
+      { prompt: "select_account consent" },
+    )
     setLoadingSSO(false)
   }
 
