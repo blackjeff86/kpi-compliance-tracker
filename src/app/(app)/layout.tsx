@@ -1,11 +1,19 @@
 // src/app/(app)/layout.tsx
-import Sidebar from "@/components/Sidebar";
+import { redirect } from "next/navigation"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/auth"
+import Sidebar from "@/components/Sidebar"
+import SessionEmailSync from "@/components/SessionEmailSync"
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) redirect("/login")
+
   return (
     <div className="flex min-h-screen bg-white">
       {/* Sidebar Fixa */}
       <Sidebar />
+      <SessionEmailSync email={session.user.email} />
       
       {/* Ajustes: 
           1. 'px-12' para um respiro elegante mas não exagerado.
@@ -18,5 +26,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
     </div>
-  );
+  )
 }

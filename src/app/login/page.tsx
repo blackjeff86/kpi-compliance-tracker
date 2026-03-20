@@ -1,33 +1,39 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { Mail, Lock, Eye, EyeOff } from "lucide-react"
+import { Loader2 } from "lucide-react"
+import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [showPassword, setShowPassword] = useState(false)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const [checkingSession, setCheckingSession] = useState(true)
+  const [loadingSSO, setLoadingSSO] = useState(false)
 
-  function persistUserSessionEmail(rawEmail?: string) {
-    if (typeof window === "undefined") return
-    const normalized = String(rawEmail || "").trim().toLowerCase()
-    const finalEmail = normalized || "guest@kpi.local"
-    window.localStorage.setItem("kpi_user_email", finalEmail)
-  }
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" })
+        if (!res.ok) return
+        const session = (await res.json()) as { user?: { email?: string } } | null
+        if (session?.user?.email) {
+          router.replace("/dashboard")
+          return
+        }
+      } catch (error) {
+        console.error("Falha ao verificar sessão SSO:", error)
+      } finally {
+        setCheckingSession(false)
+      }
+    }
+    checkSession()
+  }, [router])
 
-  // Esta função agora apenas ignora os dados e pula para o dashboard
-  function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    
-    // Log apenas para você ver no console do navegador que o clique funcionou
-    console.log("Tentativa de login ignorada. Redirecionando...")
-    persistUserSessionEmail(email)
-    
-    // Redireciona para o grupo (app) na rota /dashboard
-    router.push("/dashboard")
+  async function handleGoogleSSO() {
+    setLoadingSSO(true)
+    await signIn("google", { callbackUrl: "/dashboard" })
+    setLoadingSSO(false)
   }
 
   return (
@@ -72,50 +78,26 @@ export default function LoginPage() {
             <h2 className="text-2xl font-bold text-slate-900">Entrar na plataforma</h2>
           </div>
 
-          {/* Formulário que também redireciona sem validar */}
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">E-mail</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                <input
-                  type="email"
-                  placeholder="seu@vtex.com.br"
-                  className="flex h-12 w-full rounded-md border border-slate-200 bg-white pl-10 text-sm outline-none focus:border-[#f71963] focus:ring-1 focus:ring-[#f71963] transition-all"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Senha</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Qualquer senha funciona"
-                  className="flex h-12 w-full rounded-md border border-slate-200 bg-white pl-10 pr-10 text-sm outline-none focus:border-[#f71963] focus:ring-1 focus:ring-[#f71963] transition-all"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
+          <div className="space-y-5">
             <button
-              type="submit"
+              type="button"
+              onClick={handleGoogleSSO}
+              disabled={checkingSession || loadingSSO}
               className="w-full h-12 bg-[#f71963] text-white rounded-md font-bold text-sm hover:bg-[#d61556] shadow-lg shadow-[#f71963]/20 transition-all active:scale-[0.98]"
             >
-              Acessar Plataforma
+              {checkingSession || loadingSSO ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Entrando...
+                </span>
+              ) : (
+                "Entrar com Google SSO"
+              )}
             </button>
-          </form>
+            <p className="text-xs text-slate-500">
+              Use sua conta corporativa autorizada para acessar o sistema com autenticação SSO.
+            </p>
+          </div>
 
           <p className="mt-10 text-center text-[11px] text-slate-400 uppercase tracking-widest font-medium">
             Ambiente de Desenvolvimento

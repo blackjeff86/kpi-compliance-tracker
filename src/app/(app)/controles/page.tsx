@@ -9,6 +9,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ShieldCheck,
   AlertTriangle,
   FileText,
@@ -59,6 +60,17 @@ function safeText(v: any) {
   return String(v).trim()
 }
 
+function normalizeControlStatusLabel(s: string) {
+  const up = safeText(s).toUpperCase()
+  if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return "Não aplicável"
+  if (up.includes("EM ABERTO") || up.includes("PENDENTE") || up.includes("SEM EXEC")) return "Pendente"
+  if (up.includes("CONFORME") && !up.includes("NÃO") && !up.includes("NAO")) return "Conforme"
+  if (up.includes("REPROV")) return "Reprovado"
+  if (up.includes("NÃO CONFORME") || up.includes("NAO CONFORME") || up === "RED") return "Não conforme"
+  if (up.includes("ATEN") || up === "YELLOW") return "Em atenção"
+  return "Em atenção"
+}
+
 function formatPeriodoLabel(periodoISO: string) {
   const s = safeText(periodoISO)
   const m = s.match(/^(\d{4})-(\d{2})$/)
@@ -75,23 +87,39 @@ function clampPage(n: number) {
   return Math.floor(x)
 }
 
+function parseMultiParam(raw: string) {
+  const text = safeText(raw)
+  if (!text) return []
+  if (text === "Todos") return []
+  return Array.from(
+    new Set(
+      text
+        .split(",")
+        .map((v) => safeText(v))
+        .filter(Boolean),
+    ),
+  )
+}
+
 function buildControlsQuery(params: {
   periodo?: string
   q?: string
-  risco?: string
-  owner?: string
-  focal?: string
-  frequencia?: string
+  risco?: string[]
+  status?: string[]
+  owner?: string[]
+  focal?: string[]
+  frequencia?: string[]
   page?: number
 }) {
   const sp = new URLSearchParams()
 
   if (params.periodo) sp.set("periodo", params.periodo)
   if (params.q) sp.set("q", params.q)
-  if (params.risco && params.risco !== "Todos") sp.set("risco", params.risco)
-  if (params.owner && params.owner !== "Todos") sp.set("owner", params.owner)
-  if (params.focal && params.focal !== "Todos") sp.set("focal", params.focal)
-  if (params.frequencia && params.frequencia !== "Todos") sp.set("frequencia", params.frequencia)
+  if (params.risco && params.risco.length > 0) sp.set("risco", params.risco.join(","))
+  if (params.status && params.status.length > 0) sp.set("status", params.status.join(","))
+  if (params.owner && params.owner.length > 0) sp.set("owner", params.owner.join(","))
+  if (params.focal && params.focal.length > 0) sp.set("focal", params.focal.join(","))
+  if (params.frequencia && params.frequencia.length > 0) sp.set("frequencia", params.frequencia.join(","))
   if (params.page && params.page !== 1) sp.set("page", String(params.page))
 
   return sp.toString()
@@ -116,12 +144,13 @@ function ControlesPageContent() {
   const [currentPage, setCurrentPage] = useState(1)
 
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedRisco, setSelectedRisco] = useState("Todos")
-  const [selectedOwner, setSelectedOwner] = useState("Todos")
-  const [selectedFocal, setSelectedFocal] = useState("Todos")
+  const [selectedRiscos, setSelectedRiscos] = useState<string[]>([])
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
+  const [selectedOwners, setSelectedOwners] = useState<string[]>([])
+  const [selectedFocals, setSelectedFocals] = useState<string[]>([])
 
   // ✅ NOVO: filtro de frequência
-  const [selectedFrequencia, setSelectedFrequencia] = useState("Todos")
+  const [selectedFrequencias, setSelectedFrequencias] = useState<string[]>([])
 
   // ✅ FIXO: anos >= 2025 e meses jan-dez
   const [monthOptions, setMonthOptions] = useState<string[]>([])
@@ -132,7 +161,7 @@ function ControlesPageContent() {
   /**
    * ✅ Boot:
    * - monta lista de meses
-   * - restaura filtros da URL (periodo, q, risco, owner, focal, frequencia, page)
+   * - restaura filtros da URL (periodo, q, risco, status, owner, focal, frequencia, page)
    * - garante mês válido
    */
   useEffect(() => {
@@ -141,17 +170,19 @@ function ControlesPageContent() {
 
     const urlPeriodo = safeText(searchParams.get("periodo") || searchParams.get("period"))
     const urlQ = safeText(searchParams.get("q"))
-    const urlRisco = safeText(searchParams.get("risco")) || "Todos"
-    const urlOwner = safeText(searchParams.get("owner")) || "Todos"
-    const urlFocal = safeText(searchParams.get("focal")) || "Todos"
-    const urlFrequencia = safeText(searchParams.get("frequencia")) || "Todos"
+    const urlRiscos = parseMultiParam(safeText(searchParams.get("risco")))
+    const urlStatuses = parseMultiParam(safeText(searchParams.get("status")))
+    const urlOwners = parseMultiParam(safeText(searchParams.get("owner")))
+    const urlFocals = parseMultiParam(safeText(searchParams.get("focal")))
+    const urlFrequencias = parseMultiParam(safeText(searchParams.get("frequencia")))
     const urlPage = clampPage(Number(searchParams.get("page") || 1))
 
     if (urlQ) setSearchTerm(urlQ)
-    if (urlRisco) setSelectedRisco(urlRisco)
-    if (urlOwner) setSelectedOwner(urlOwner)
-    if (urlFocal) setSelectedFocal(urlFocal)
-    if (urlFrequencia) setSelectedFrequencia(urlFrequencia)
+    setSelectedRiscos(urlRiscos)
+    setSelectedStatuses(urlStatuses)
+    setSelectedOwners(urlOwners)
+    setSelectedFocals(urlFocals)
+    setSelectedFrequencias(urlFrequencias)
     setCurrentPage(urlPage)
 
     const fallbackMonth = resolveReferenceMonth(opts)
@@ -172,10 +203,11 @@ function ControlesPageContent() {
     const qs = buildControlsQuery({
       periodo: selectedMonth,
       q: searchTerm || undefined,
-      risco: selectedRisco || "Todos",
-      owner: selectedOwner || "Todos",
-      focal: selectedFocal || "Todos",
-      frequencia: selectedFrequencia || "Todos",
+      risco: selectedRiscos,
+      status: selectedStatuses,
+      owner: selectedOwners,
+      focal: selectedFocals,
+      frequencia: selectedFrequencias,
       page: currentPage,
     })
 
@@ -183,10 +215,11 @@ function ControlesPageContent() {
   }, [
     selectedMonth,
     searchTerm,
-    selectedRisco,
-    selectedOwner,
-    selectedFocal,
-    selectedFrequencia,
+    selectedRiscos,
+    selectedStatuses,
+    selectedOwners,
+    selectedFocals,
+    selectedFrequencias,
     currentPage,
     router,
   ])
@@ -263,6 +296,7 @@ function ControlesPageContent() {
    * ✅ Filtros garantidos:
    * - Busca: id, nome, owner, focal, framework, risco, frequencia
    * - Risco: compara por "contém"
+   * - Status: match do status final normalizado
    * - Owner/Focal/Frequencia: match exato
    */
   const filteredData = useMemo(() => {
@@ -283,19 +317,21 @@ function ControlesPageContent() {
 
       const matchSearch = !q || haystack.includes(q)
 
-      const riscoFilter = safeText(selectedRisco)
       const matchRisco =
-        riscoFilter === "Todos" ||
-        safeText(item.risco).toLowerCase().includes(riscoFilter.toLowerCase())
+        selectedRiscos.length === 0 ||
+        selectedRiscos.some((risk) => safeText(item.risco).toLowerCase().includes(safeText(risk).toLowerCase()))
 
-      const matchOwner = selectedOwner === "Todos" || safeText(item.control_owner) === safeText(selectedOwner)
-      const matchFocal = selectedFocal === "Todos" || safeText(item.focal_point_name) === safeText(selectedFocal)
+      const normalizedStatus = normalizeControlStatusLabel(item.status_final)
+      const matchStatus = selectedStatuses.length === 0 || selectedStatuses.includes(normalizedStatus)
+
+      const matchOwner = selectedOwners.length === 0 || selectedOwners.includes(safeText(item.control_owner))
+      const matchFocal = selectedFocals.length === 0 || selectedFocals.includes(safeText(item.focal_point_name))
       const matchFrequencia =
-        selectedFrequencia === "Todos" || safeText(item.frequencia) === safeText(selectedFrequencia)
+        selectedFrequencias.length === 0 || selectedFrequencias.includes(safeText(item.frequencia))
 
-      return matchSearch && matchRisco && matchOwner && matchFocal && matchFrequencia
+      return matchSearch && matchRisco && matchStatus && matchOwner && matchFocal && matchFrequencia
     })
-  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedFrequencia, processedData])
+  }, [searchTerm, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, processedData])
 
   const ownersList = useMemo(() => {
     return Array.from(new Set(controles.map((c) => safeText(c.control_owner))))
@@ -326,7 +362,7 @@ function ControlesPageContent() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedFrequencia, selectedMonth])
+  }, [searchTerm, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, selectedMonth])
 
   const getRiskStyles = (risco: string) => {
     const r = (risco || "").toLowerCase()
@@ -335,17 +371,6 @@ function ControlesPageContent() {
     if (r.includes("high") || r.includes("alto")) return "bg-orange-50 text-orange-600 border-orange-100"
     if (r.includes("critical") || r.includes("crítico")) return "bg-red-50 text-red-600 border-red-100"
     return "bg-slate-50 text-slate-600 border-slate-100"
-  }
-
-  const normalizeControlStatusLabel = (s: string) => {
-    const up = safeText(s).toUpperCase()
-    if (up.includes("NÃO APLIC") || up.includes("NAO APLIC")) return "Não aplicável"
-    if (up.includes("EM ABERTO") || up.includes("PENDENTE") || up.includes("SEM EXEC")) return "Pendente"
-    if (up.includes("CONFORME") && !up.includes("NÃO") && !up.includes("NAO")) return "Conforme"
-    if (up.includes("REPROV")) return "Reprovado"
-    if (up.includes("NÃO CONFORME") || up.includes("NAO CONFORME") || up === "RED") return "Não conforme"
-    if (up.includes("ATEN") || up === "YELLOW") return "Em atenção"
-    return "Em atenção"
   }
 
   const getFinalStatusStyle = (s: string) => {
@@ -384,13 +409,14 @@ function ControlesPageContent() {
     return buildControlsQuery({
       periodo: selectedMonth,
       q: searchTerm || undefined,
-      risco: selectedRisco,
-      owner: selectedOwner,
-      focal: selectedFocal,
-      frequencia: selectedFrequencia,
+      risco: selectedRiscos,
+      status: selectedStatuses,
+      owner: selectedOwners,
+      focal: selectedFocals,
+      frequencia: selectedFrequencias,
       page: currentPage,
     })
-  }, [selectedMonth, searchTerm, selectedRisco, selectedOwner, selectedFocal, selectedFrequencia, currentPage])
+  }, [selectedMonth, searchTerm, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, currentPage])
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
@@ -431,7 +457,7 @@ function ControlesPageContent() {
       </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-8 gap-4 items-center">
           <div className="relative">
             <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f71866] h-4 w-4" />
             <select
@@ -459,69 +485,53 @@ function ControlesPageContent() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm outline-none transition-all"
-              placeholder="Buscar por ID, Nome, Risco, Framework, Owner, Focal..."
+              placeholder="Buscar por ID, Nome, Risco, Status, Framework, Owner, Focal..."
             />
           </div>
 
-          <select
-            value={selectedRisco}
-            onChange={(e) => setSelectedRisco(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer"
-          >
-            <option value="Todos">Risco (Todos)</option>
-            <option value="Critical">Critical</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </select>
+          <MultiSelectFilter
+            label="Risco"
+            options={["Critical", "High", "Medium", "Low"]}
+            selected={selectedRiscos}
+            onChange={setSelectedRiscos}
+          />
 
-          <select
-            value={selectedOwner}
-            onChange={(e) => setSelectedOwner(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer"
-          >
-            <option value="Todos">Owner (Todos)</option>
-            {ownersList.map((owner) => (
-              <option key={owner} value={owner}>
-                {owner}
-              </option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            label="Status"
+            options={["Conforme", "Em atenção", "Não conforme", "Reprovado", "Pendente", "Não aplicável"]}
+            selected={selectedStatuses}
+            onChange={setSelectedStatuses}
+          />
 
-          <select
-            value={selectedFocal}
-            onChange={(e) => setSelectedFocal(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer"
-          >
-            <option value="Todos">Focal Point (Todos)</option>
-            {focalsList.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            label="Owner"
+            options={ownersList}
+            selected={selectedOwners}
+            onChange={setSelectedOwners}
+          />
 
-          {/* ✅ NOVO: filtro de frequência */}
-          <select
-            value={selectedFrequencia}
-            onChange={(e) => setSelectedFrequencia(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer"
-          >
-            <option value="Todos">Frequência (Todos)</option>
-            {frequenciasList.map((fr) => (
-              <option key={fr} value={fr}>
-                {fr}
-              </option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            label="Focal Point"
+            options={focalsList}
+            selected={selectedFocals}
+            onChange={setSelectedFocals}
+          />
+
+          <MultiSelectFilter
+            label="Frequência"
+            options={frequenciasList}
+            selected={selectedFrequencias}
+            onChange={setSelectedFrequencias}
+          />
 
           <button
             onClick={() => {
               setSearchTerm("")
-              setSelectedRisco("Todos")
-              setSelectedOwner("Todos")
-              setSelectedFocal("Todos")
-              setSelectedFrequencia("Todos")
+              setSelectedRiscos([])
+              setSelectedStatuses([])
+              setSelectedOwners([])
+              setSelectedFocals([])
+              setSelectedFrequencias([])
 
               setSelectedMonth(resolveReferenceMonth(monthOptions, getPreviousMonthISO()))
 
@@ -755,6 +765,86 @@ function ControlesPageContent() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string
+  options: string[]
+  selected: string[]
+  onChange: (values: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = React.useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    function onDocClick(event: MouseEvent) {
+      if (!ref.current) return
+      if (!ref.current.contains(event.target as Node)) setOpen(false)
+    }
+
+    if (open) document.addEventListener("mousedown", onDocClick)
+    return () => document.removeEventListener("mousedown", onDocClick)
+  }, [open])
+
+  const selectedLabel = selected.length > 0 ? `${label} (${selected.length})` : `${label} (Todos)`
+
+  const toggleOption = (value: string) => {
+    const exists = selected.includes(value)
+    if (exists) onChange(selected.filter((v) => v !== value))
+    else onChange([...selected, value])
+  }
+
+  const clearAll = () => onChange([])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 outline-none cursor-pointer inline-flex items-center justify-between"
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open ? (
+        <div className="absolute z-20 mt-2 w-full min-w-[220px] bg-white border border-slate-200 rounded-lg shadow-lg p-2">
+          <button
+            type="button"
+            onClick={clearAll}
+            className="w-full text-left px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600"
+          >
+            Limpar seleção
+          </button>
+          <div className="max-h-56 overflow-auto space-y-1 mt-1">
+            {options.length > 0 ? (
+              options.map((opt) => {
+                const checked = selected.includes(opt)
+                return (
+                  <label key={opt} className="flex items-center gap-2 px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleOption(opt)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#f71866] focus:ring-[#f71866]"
+                    />
+                    <span className="truncate">{opt}</span>
+                  </label>
+                )
+              })
+            ) : (
+              <div className="px-2 py-2 text-xs text-slate-400">Sem opções</div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

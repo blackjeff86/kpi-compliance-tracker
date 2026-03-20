@@ -14,11 +14,12 @@ import {
 } from "recharts"
 import {
   AlertCircle,
-  CheckCircle2,
-  Clock,
+  BarChart3,
   ChevronDown,
   Eye,
   Loader2,
+  ShieldCheck,
+  Table2,
 } from "lucide-react"
 import { fetchDashboardData } from "./actions"
 import { getPreviousMonthISO, resolveReferenceMonth } from "@/lib/utils"
@@ -28,7 +29,7 @@ type DashboardItem = {
   code: string
   title: string
   kpi: string
-  status: "Red" | "Yellow"
+  status: "Red"
   risk: string
   owner: string
   framework: string
@@ -86,10 +87,6 @@ function toPercent(value: number, total: number) {
   return `${Math.round(pct)}%`
 }
 
-function controlsSubValue(count: number, total: number) {
-  return `${count} de ${total} Controles`
-}
-
 export default function DashboardPage() {
   const [filterFramework, setFilterFramework] = useState("Todos")
   const [filterPeriodo, setFilterPeriodo] = useState(getPreviousMonthISO())
@@ -106,6 +103,9 @@ export default function DashboardPage() {
     yellowCount: 0,
     redCount: 0,
     total: 0,
+    applicableControls: 0,
+    coveredApplicableControls: 0,
+    notApplicableControls: 0,
     pendingReviews: 0,
     overduePlans: 0,
   })
@@ -129,10 +129,10 @@ export default function DashboardPage() {
 
       const payload = result.data
       setFrameworkOptions(payload.frameworkOptions)
-      const resolvedOptions = payload.periodOptions.includes(filterPeriodo)
-        ? payload.periodOptions
-        : [filterPeriodo, ...payload.periodOptions]
-      setPeriodOptions(resolvedOptions)
+      setPeriodOptions((prev) => {
+        const merged = new Set<string>([...prev, ...payload.periodOptions, filterPeriodo])
+        return Array.from(merged).sort((a, b) => b.localeCompare(a))
+      })
       setSelectedPeriodResolved(payload.selectedPeriod)
       setSummary(payload.summary)
       setChartData(payload.chartData)
@@ -159,6 +159,11 @@ export default function DashboardPage() {
       Red: item.red,
     }))
   }, [chartData])
+
+  const effectiveControls = summary.greenCount + summary.yellowCount
+  const applicableControls = summary.applicableControls
+  const coveredApplicableControls = summary.coveredApplicableControls
+  const notApplicableControls = summary.notApplicableControls
 
   const limparFiltros = () => {
     setFilterFramework("Todos")
@@ -224,14 +229,32 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatusCard label="Green" value={toPercent(summary.greenCount, summary.total)} subValue={controlsSubValue(summary.greenCount, summary.total)} color="emerald" icon={<CheckCircle2 />} />
-            <StatusCard label="Yellow" value={toPercent(summary.yellowCount, summary.total)} subValue={controlsSubValue(summary.yellowCount, summary.total)} color="amber" icon={<AlertCircle />} />
-            <StatusCard label="Red" value={toPercent(summary.redCount, summary.total)} subValue={controlsSubValue(summary.redCount, summary.total)} color="red" icon={<AlertCircle />} />
+            <StatusCard
+              label="Totalidade de Controles"
+              value={String(summary.total)}
+              subValue="Controles no escopo filtrado"
+              color="slate"
+              icon={<Table2 />}
+            />
+            <StatusCard
+              label="KPI Coverage Rate"
+              value={toPercent(coveredApplicableControls, applicableControls)}
+              subValue={`${coveredApplicableControls} de ${applicableControls} controles com execução (${notApplicableControls} N/A fora da conta)`}
+              color="amber"
+              icon={<BarChart3 />}
+            />
+            <StatusCard
+              label="Effectiveness Rate"
+              value={toPercent(effectiveControls, applicableControls)}
+              subValue={`${effectiveControls} de ${applicableControls} controles efetivos (${notApplicableControls} N/A fora da conta)`}
+              color="emerald"
+              icon={<ShieldCheck />}
+            />
 
             <div className="bg-slate-900 p-6 rounded-xl shadow-lg shadow-slate-200 group">
               <div className="flex items-center justify-between mb-4">
                 <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Pendências</p>
-                <Clock className="text-slate-500 h-5 w-5" />
+                <AlertCircle className="text-slate-500 h-5 w-5" />
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-xs">
@@ -316,10 +339,11 @@ function StatusCard({
   label: string
   value: string
   subValue: string
-  color: "emerald" | "amber" | "red"
+  color: "slate" | "emerald" | "amber" | "red"
   icon: React.ReactElement<{ className?: string }>
 }) {
   const colorMap: Record<string, string> = {
+    slate: "text-slate-700 border-slate-200 bg-slate-100",
     emerald: "text-emerald-600 border-emerald-200 bg-emerald-50",
     amber: "text-amber-500 border-amber-200 bg-amber-50",
     red: "text-red-600 border-red-200 bg-red-50",
@@ -367,9 +391,7 @@ function TableRow({ kpiRef, code, title, kpi, status, risk, owner, periodo }: Da
       <td className="py-4 px-8 text-xs font-medium text-slate-600">{kpi}</td>
       <td className="py-4 px-8 text-center">
         <span
-          className={`inline-flex px-2.5 py-1 rounded text-[10px] font-bold uppercase border ${
-            status === "Red" ? "bg-red-50 text-red-600 border-red-100" : "bg-amber-50 text-amber-600 border-amber-100"
-          }`}
+          className="inline-flex px-2.5 py-1 rounded text-[10px] font-bold uppercase border bg-red-50 text-red-600 border-red-100"
         >
           {status}
         </span>

@@ -14,6 +14,9 @@ type DashboardResult =
           yellowCount: number
           redCount: number
           total: number
+          applicableControls: number
+          coveredApplicableControls: number
+          notApplicableControls: number
           pendingReviews: number
           overduePlans: number
         }
@@ -28,7 +31,7 @@ type DashboardResult =
           code: string
           title: string
           kpi: string
-          status: "Red" | "Yellow"
+          status: "Red"
           risk: string
           owner: string
           framework: string
@@ -77,7 +80,10 @@ export async function fetchDashboardData(params?: {
     const periodOptions = periodRows.map((r) => safeText(r.period)).filter(Boolean)
     const statusRows = selectedPeriod
       ? await sql`
-          WITH last_run AS (
+          WITH period_ctx AS (
+            SELECT EXTRACT(MONTH FROM ((${selectedPeriod} || '-01')::date))::int AS m
+          ),
+          last_run AS (
             SELECT DISTINCT ON (kr.kpi_uuid)
               kr.kpi_uuid,
               kr.status::text AS status
@@ -88,32 +94,81 @@ export async function fetchDashboardData(params?: {
           per_control AS (
             SELECT
               c.id_control,
+              COALESCE(c.frequency, '') AS frequency,
               COUNT(*)::int AS total_kpis,
               SUM(CASE WHEN lr.kpi_uuid IS NOT NULL THEN 1 ELSE 0 END)::int AS with_run,
               SUM(CASE WHEN lr.status = 'GREEN' THEN 1 ELSE 0 END)::int AS green_count,
               SUM(CASE WHEN lr.status = 'YELLOW' THEN 1 ELSE 0 END)::int AS yellow_count,
-              SUM(CASE WHEN lr.status = 'RED' THEN 1 ELSE 0 END)::int AS red_count
+              SUM(CASE WHEN lr.status = 'RED' THEN 1 ELSE 0 END)::int AS red_count,
+              CASE
+                WHEN (
+                  (
+                    COALESCE(c.frequency, '') ILIKE '%trim%'
+                    OR COALESCE(c.frequency, '') ILIKE '%trime%'
+                    OR COALESCE(c.frequency, '') ILIKE '%quarter%'
+                    OR COALESCE(c.frequency, '') ILIKE '%trimestral%'
+                    OR UPPER(TRIM(COALESCE(c.frequency, ''))) = 'QUARTERLY'
+                    OR UPPER(TRIM(COALESCE(c.frequency, ''))) = 'QUARTER'
+                  )
+                  AND (SELECT m FROM period_ctx) NOT IN (1, 4, 7, 10)
+                ) THEN TRUE
+                WHEN (
+                  (
+                    COALESCE(c.frequency, '') ILIKE '%semest%'
+                    OR COALESCE(c.frequency, '') ILIKE '%semestral%'
+                    OR COALESCE(c.frequency, '') ILIKE '%semi_annual%'
+                    OR COALESCE(c.frequency, '') ILIKE '%semi-annual%'
+                    OR COALESCE(c.frequency, '') ILIKE '%semiannual%'
+                    OR UPPER(TRIM(COALESCE(c.frequency, ''))) IN ('SEMI_ANNUAL','SEMIANNUAL','SEMI-ANNUAL','SEMI')
+                  )
+                  AND (SELECT m FROM period_ctx) NOT IN (1, 7)
+                ) THEN TRUE
+                WHEN (
+                  (
+                    (
+                      COALESCE(c.frequency, '') ILIKE '%anual%'
+                      OR COALESCE(c.frequency, '') ILIKE '%annual%'
+                      OR COALESCE(c.frequency, '') ILIKE '%year%'
+                      OR UPPER(TRIM(COALESCE(c.frequency, ''))) IN ('ANNUAL','YEARLY','YEAR')
+                    )
+                    AND UPPER(TRIM(COALESCE(c.frequency, ''))) NOT LIKE 'SEMI%'
+                    AND COALESCE(c.frequency, '') NOT ILIKE '%semi_annual%'
+                    AND COALESCE(c.frequency, '') NOT ILIKE '%semiannual%'
+                    AND COALESCE(c.frequency, '') NOT ILIKE '%semi-annual%'
+                    AND COALESCE(c.frequency, '') NOT ILIKE '%semest%'
+                    AND COALESCE(c.frequency, '') NOT ILIKE '%semestral%'
+                  )
+                  AND (SELECT m FROM period_ctx) NOT IN (9, 10, 11, 12)
+                ) THEN TRUE
+                ELSE FALSE
+              END AS is_not_applicable
             FROM control_kpis ck
             JOIN controls c ON c.id_control = ck.id_control
             LEFT JOIN last_run lr ON lr.kpi_uuid = ck.kpi_uuid
             WHERE (${framework}::text IS NULL OR ${framework} = '' OR c.framework = ${framework})
-            GROUP BY c.id_control
+            GROUP BY c.id_control, c.frequency
           )
           SELECT
             SUM(CASE WHEN pc.with_run = pc.total_kpis AND pc.red_count = 0 AND pc.yellow_count = 0 AND pc.green_count > 0 THEN 1 ELSE 0 END)::int AS green_count,
             SUM(CASE WHEN pc.with_run > 0 AND pc.red_count = 0 AND pc.yellow_count > 0 THEN 1 ELSE 0 END)::int AS yellow_count,
             SUM(CASE WHEN pc.red_count > 0 THEN 1 ELSE 0 END)::int AS red_count,
             COUNT(*)::int AS total,
+            SUM(CASE WHEN pc.is_not_applicable THEN 0 ELSE 1 END)::int AS applicable_controls,
+            SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.with_run > 0 THEN 1 ELSE 0 END)::int AS covered_applicable_controls,
+            SUM(CASE WHEN pc.is_not_applicable THEN 1 ELSE 0 END)::int AS not_applicable_controls,
             SUM(CASE WHEN pc.with_run < pc.total_kpis THEN 1 ELSE 0 END)::int AS pending_reviews
           FROM per_control pc
         `
-      : [{ green_count: 0, yellow_count: 0, red_count: 0, total: 0, pending_reviews: 0 }]
+      : [{ green_count: 0, yellow_count: 0, red_count: 0, total: 0, applicable_controls: 0, covered_applicable_controls: 0, not_applicable_controls: 0, pending_reviews: 0 }]
 
     const summary = {
       greenCount: toInt(statusRows[0]?.green_count),
       yellowCount: toInt(statusRows[0]?.yellow_count),
       redCount: toInt(statusRows[0]?.red_count),
       total: toInt(statusRows[0]?.total),
+      applicableControls: toInt(statusRows[0]?.applicable_controls),
+      coveredApplicableControls: toInt(statusRows[0]?.covered_applicable_controls),
+      notApplicableControls: toInt(statusRows[0]?.not_applicable_controls),
       pendingReviews: 0,
       overduePlans: 0,
     }
@@ -197,11 +252,9 @@ export async function fetchDashboardData(params?: {
           FROM control_kpis ck
           JOIN controls c ON c.id_control = ck.id_control
           LEFT JOIN last_run lr ON lr.kpi_uuid = ck.kpi_uuid
-          WHERE lr.status IN ('RED', 'YELLOW')
+          WHERE lr.status = 'RED'
             AND (${framework}::text IS NULL OR ${framework} = '' OR c.framework = ${framework})
-          ORDER BY
-            CASE WHEN lr.status = 'RED' THEN 0 ELSE 1 END,
-            c.id_control ASC
+          ORDER BY c.id_control ASC
           LIMIT 50
         `
       : []
@@ -211,7 +264,7 @@ export async function fetchDashboardData(params?: {
       code: safeText(row.code),
       title: safeText(row.title),
       kpi: safeText(row.kpi),
-      status: safeText(row.status).toUpperCase() === "RED" ? ("Red" as const) : ("Yellow" as const),
+      status: "Red" as const,
       risk: safeText(row.risk),
       owner: safeText(row.owner),
       framework: safeText(row.framework),
