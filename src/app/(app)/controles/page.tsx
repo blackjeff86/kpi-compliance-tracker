@@ -501,7 +501,7 @@ function ControlesPageContent() {
 
           <MultiSelectFilter
             label="Status"
-            options={["Conforme", "Em atenção", "Não conforme", "Reprovado", "Pendente", "Não aplicável"]}
+            options={["Conforme", "Parcial", "Em atenção", "Não conforme", "Reprovado", "Pendente", "Não aplicável"]}
             selected={selectedStatuses}
             onChange={setSelectedStatuses}
           />
