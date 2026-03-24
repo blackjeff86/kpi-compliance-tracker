@@ -249,6 +249,15 @@ export default function PlanosAcaoPage() {
     setFilterFramework("Todos")
   }
 
+  const currentQuery = useMemo(() => {
+    const qp = new URLSearchParams()
+    if (searchTerm) qp.set("q", searchTerm)
+    if (filterFramework !== "Todos") qp.set("framework", filterFramework)
+    if (filterResponsavel !== "Todos") qp.set("responsavel", filterResponsavel)
+    if (filterStatus !== "Todos") qp.set("status", filterStatus)
+    return qp.toString()
+  }, [searchTerm, filterFramework, filterResponsavel, filterStatus])
+
   const closeCreateModal = (force = false) => {
     if (createSaving && !force) return
     setCreateOpen(false)
@@ -496,12 +505,15 @@ export default function PlanosAcaoPage() {
                     <td className="px-6 py-4 text-center">
                       <div className="flex justify-center items-center">
                         {item.status === "Concluído" ? (
-                          <Link href={`/planos/${encodeURIComponent(item.planoId)}?domain=${item.planType}`} className="p-2 text-slate-400 hover:text-[#f71866] transition-colors">
+                          <Link
+                            href={`/planos/${encodeURIComponent(item.planoId)}?domain=${item.planType}${currentQuery ? `&${currentQuery}` : ""}`}
+                            className="p-2 text-slate-400 hover:text-[#f71866] transition-colors"
+                          >
                             <Eye size={18} />
                           </Link>
                         ) : (
                           <Link
-                            href={`/planos/${encodeURIComponent(item.planoId)}?domain=${item.planType}`}
+                            href={`/planos/${encodeURIComponent(item.planoId)}?domain=${item.planType}${currentQuery ? `&${currentQuery}` : ""}`}
                             className="px-5 py-1.5 text-[10px] font-bold text-[#f71866] border border-[#f71866]/30 hover:bg-[#f71866] hover:text-white rounded-md transition-all uppercase tracking-widest shadow-sm"
                           >
                             Atualizar

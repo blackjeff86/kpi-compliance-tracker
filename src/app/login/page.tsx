@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [loadingSSO, setLoadingSSO] = useState(false)
 
   useEffect(() => {
+    const host = String(window.location.hostname || "").trim().toLowerCase()
+    const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "::1"
+    if (process.env.NODE_ENV !== "production" && isLocalhost) {
+      router.replace("/dashboard")
+      return
+    }
+
     async function checkSession() {
       try {
         const res = await fetch("/api/auth/session", { cache: "no-store" })

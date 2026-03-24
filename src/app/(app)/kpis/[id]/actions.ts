@@ -319,6 +319,9 @@ export async function fetchKpiDetail(kpiRef: string) {
  */
 export async function saveKpiTargetAndRules(input: {
   kpiRef: string
+  kpi_id: string
+  kpi_name: string
+  kpi_description: string
   kpi_target: string
   kpi_evaluation_mode: KpiEvaluationMode
   yellow_ratio: number
@@ -333,6 +336,14 @@ export async function saveKpiTargetAndRules(input: {
 
     const kpiUuid = detail?.kpi_uuid ? String(detail.kpi_uuid) : null
     if (!kpiUuid) return { success: false as const, error: "KPI sem kpi_uuid." }
+
+    const kpi_id = safeText(input.kpi_id)
+    if (!kpi_id) return { success: false as const, error: "KPI ID é obrigatório." }
+
+    const kpi_name = safeText(input.kpi_name)
+    if (!kpi_name) return { success: false as const, error: "Texto do KPI é obrigatório." }
+
+    const kpi_description = safeText(input.kpi_description)
 
     const mode = normalizeMode(input.kpi_evaluation_mode)
 
@@ -354,7 +365,10 @@ export async function saveKpiTargetAndRules(input: {
     // 1) atualiza target + mode no control_kpis
     await sql`
       UPDATE control_kpis
-      SET kpi_target = ${kpi_target},
+      SET kpi_id = ${kpi_id},
+          kpi_name = ${kpi_name},
+          kpi_description = ${kpi_description},
+          kpi_target = ${kpi_target},
           kpi_evaluation_mode = ${mode},
           updated_at = now()
       WHERE kpi_uuid = (${kpiUuid})::uuid
@@ -378,6 +392,9 @@ export async function saveKpiTargetAndRules(input: {
     return {
       success: true as const,
       data: {
+        kpi_id,
+        kpi_name,
+        kpi_description: kpi_description ?? "",
         kpi_target,
         kpi_evaluation_mode: mode,
         rules: warning ? DEFAULT_RULES : rules,
@@ -385,6 +402,78 @@ export async function saveKpiTargetAndRules(input: {
       ...(warning ? { warning } : {}),
     }
   } catch (e: any) {
+    const msg = String(e?.message || "")
+    if (msg.toLowerCase().includes("duplicate key") && msg.toLowerCase().includes("kpi_id")) {
+      return { success: false as const, error: "Já existe um KPI com esse ID. Use outro valor." }
+    }
     return { success: false as const, error: e?.message || "Falha ao salvar." }
+  }
+}
+
+export async function deleteKpiByRef(input: { kpiRef: string }) {
+  try {
+    const kpiRef = safeText(input?.kpiRef)
+    if (!kpiRef) return { success: false as const, error: "kpiRef é obrigatório." }
+
+    const detail = await resolveKpiDetail(kpiRef)
+    if (!detail) return { success: false as const, error: "KPI não encontrado." }
+
+    const kpiUuid = detail?.kpi_uuid ? String(detail.kpi_uuid) : null
+    if (!kpiUuid) return { success: false as const, error: "KPI sem kpi_uuid." }
+
+    // 1) limpa vínculos de planos de ação por run_id antes de apagar kpi_runs
+    await sql`
+      UPDATE action_plans
+      SET kpi_run_id = NULL
+      WHERE kpi_run_id IN (
+        SELECT kr.id::text
+        FROM kpi_runs kr
+        WHERE kr.kpi_uuid = (${kpiUuid})::uuid
+      )
+    `
+
+    // 2) tentativa best-effort para ambientes que têm action_plans.kpi_uuid
+    try {
+      await sql`
+        UPDATE action_plans
+        SET kpi_uuid = NULL
+        WHERE kpi_uuid = (${kpiUuid})::uuid
+      `
+    } catch {
+      // coluna pode não existir em alguns ambientes
+    }
+
+    // 3) remove revisões desse KPI
+    await sql`
+      DELETE FROM security_reviews
+      WHERE run_id IN (
+        SELECT kr.id
+        FROM kpi_runs kr
+        WHERE kr.kpi_uuid = (${kpiUuid})::uuid
+      )
+    `
+
+    // 4) remove execuções do KPI
+    await sql`
+      DELETE FROM kpi_runs
+      WHERE kpi_uuid = (${kpiUuid})::uuid
+    `
+
+    // 5) remove regra específica do KPI no admin_settings (se existir)
+    const key = `kpi_rules:${kpiUuid}`
+    await sql`
+      DELETE FROM admin_settings
+      WHERE key = ${key}
+    `
+
+    // 6) remove KPI do catálogo
+    await sql`
+      DELETE FROM control_kpis
+      WHERE kpi_uuid = (${kpiUuid})::uuid
+    `
+
+    return { success: true as const, data: { kpi_uuid: kpiUuid } }
+  } catch (e: any) {
+    return { success: false as const, error: e?.message || "Falha ao excluir KPI." }
   }
 }

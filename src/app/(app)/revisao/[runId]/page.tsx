@@ -364,7 +364,7 @@ export default function RevisaoDetalhePage() {
             <h1 className="text-2xl font-bold text-slate-900">Detalhamento da Revisão</h1>
             <p className="text-slate-500 text-sm mt-1">Validação final da execução registrada e dos planos de ação associados.</p>
           </div>
-          <Link href={backHref} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50">
+          <Link href={backHref} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50">
             <ArrowLeft size={14} /> Voltar
           </Link>
         </div>

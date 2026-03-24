@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useParams, useSearchParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import {
   ChevronRight,
   Settings,
@@ -11,15 +11,17 @@ import {
   AlertTriangle,
   Save,
   X,
+  Trash2,
   FileText,
   User,
   Tag,
   Hash,
+  ArrowLeft,
   ArrowUp,
   ArrowDown,
   ToggleLeft,
 } from "lucide-react"
-import { fetchKpiDetail, saveKpiTargetAndRules } from "./actions"
+import { deleteKpiByRef, fetchKpiDetail, saveKpiTargetAndRules } from "./actions"
 
 type Rules = {
   yellow_ratio: number
@@ -122,6 +124,7 @@ export default function KpiDetailPage() {
 }
 
 function KpiDetailPageContent() {
+  const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
 
@@ -135,6 +138,8 @@ function KpiDetailPageContent() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [warnMsg, setWarnMsg] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
@@ -145,6 +150,9 @@ function KpiDetailPageContent() {
   const [modalOpen, setModalOpen] = useState(false)
 
   // config
+  const [kpiIdEdit, setKpiIdEdit] = useState<string>("")
+  const [kpiNameEdit, setKpiNameEdit] = useState<string>("")
+  const [kpiDescriptionEdit, setKpiDescriptionEdit] = useState<string>("")
   const [kpiTarget, setKpiTarget] = useState<string>("0")
   const [mode, setMode] = useState<KpiEvaluationMode>("UP")
   const [rules, setRules] = useState<Rules>({ yellow_ratio: 0.9, zero_meta_yellow_max: 1 })
@@ -168,6 +176,9 @@ function KpiDetailPageContent() {
 
         setDetail(res.data.detail)
         setLatestReview(res.data.latestReview || null)
+        setKpiIdEdit(res.data.detail.kpi_id ?? "")
+        setKpiNameEdit(res.data.detail.kpi_name ?? "")
+        setKpiDescriptionEdit(res.data.detail.kpi_description ?? "")
         setMode(res.data.detail.kpi_evaluation_mode ?? "UP")
         setKpiTarget(res.data.detail.kpi_target ?? "0")
         setRules(res.data.rules)
@@ -235,6 +246,9 @@ function KpiDetailPageContent() {
     try {
       const res = await saveKpiTargetAndRules({
         kpiRef,
+        kpi_id: kpiIdEdit,
+        kpi_name: kpiNameEdit,
+        kpi_description: kpiDescriptionEdit,
         kpi_target: kpiTarget,
         kpi_evaluation_mode: mode,
         yellow_ratio: rules.yellow_ratio,
@@ -251,6 +265,9 @@ function KpiDetailPageContent() {
       setOkMsg("Configurações salvas com sucesso.")
       setModalOpen(false)
 
+      setKpiIdEdit(res.data.kpi_id)
+      setKpiNameEdit(res.data.kpi_name)
+      setKpiDescriptionEdit(res.data.kpi_description ?? "")
       setKpiTarget(res.data.kpi_target)
       setMode(res.data.kpi_evaluation_mode)
       setRules(res.data.rules)
@@ -259,6 +276,9 @@ function KpiDetailPageContent() {
         p
           ? {
               ...p,
+              kpi_id: res.data.kpi_id,
+              kpi_name: res.data.kpi_name,
+              kpi_description: res.data.kpi_description,
               kpi_target: res.data.kpi_target,
               kpi_evaluation_mode: res.data.kpi_evaluation_mode,
             }
@@ -268,6 +288,32 @@ function KpiDetailPageContent() {
       setErrorMsg("Falha ao salvar.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const onDeleteConfirmed = async () => {
+    if (!detail) return
+
+    setDeleting(true)
+    setErrorMsg(null)
+    setWarnMsg(null)
+    setOkMsg(null)
+
+    try {
+      const res = await deleteKpiByRef({ kpiRef })
+      if (!res?.success) {
+        setErrorMsg(res?.error || "Falha ao excluir KPI.")
+        setDeleting(false)
+        return
+      }
+
+      setDeleteConfirmOpen(false)
+      setModalOpen(false)
+      router.replace(backHref)
+    } catch {
+      setErrorMsg("Falha ao excluir KPI.")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -286,7 +332,11 @@ function KpiDetailPageContent() {
           <div className="text-sm font-bold text-red-600">KPI não encontrado</div>
           <div className="text-xs text-slate-500 mt-2">{errorMsg || "Tente voltar e selecionar outro KPI."}</div>
           <div className="mt-4">
-            <Link href={backHref} className="btn-vtex inline-flex items-center gap-2">
+            <Link
+              href={backHref}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50"
+            >
+              <ArrowLeft size={14} />
               Voltar
             </Link>
           </div>
@@ -331,7 +381,25 @@ function KpiDetailPageContent() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => setModalOpen(true)} className="btn-vtex flex items-center gap-2" title="Configurar KPI">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50"
+          >
+            <ArrowLeft size={14} />
+            Voltar
+          </Link>
+          <button
+            onClick={() => {
+              setKpiIdEdit(detail.kpi_id ?? "")
+              setKpiNameEdit(detail.kpi_name ?? "")
+              setKpiDescriptionEdit(detail.kpi_description ?? "")
+              setKpiTarget(detail.kpi_target ?? "0")
+              setMode(detail.kpi_evaluation_mode ?? "UP")
+              setModalOpen(true)
+            }}
+            className="btn-vtex flex items-center gap-2"
+            title="Configurar KPI"
+          >
             <Settings size={14} />
             Configurar
           </button>
@@ -441,7 +509,7 @@ function KpiDetailPageContent() {
       {/* MODAL CONFIG */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !saving && setModalOpen(false)} />
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !(saving || deleting) && setModalOpen(false)} />
 
           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl relative z-10 overflow-hidden border border-slate-100">
             <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-3">
@@ -449,17 +517,17 @@ function KpiDetailPageContent() {
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Configurações</div>
                 <div className="text-lg font-semibold text-slate-900 flex items-center gap-2 mt-1">
                   <Settings size={16} className="text-[#f71963]" />
-                  Meta e Regra de Pontuação
+                  Configuração do KPI
                 </div>
                 <div className="text-xs text-slate-500 font-medium mt-1">
-                  Defina primeiro o <b>modo de avaliação</b> e depois a meta (target).
+                  Edite identificação, texto e também o modo/meta de avaliação do KPI.
                 </div>
               </div>
 
               <button
-                onClick={() => !saving && setModalOpen(false)}
+                onClick={() => !(saving || deleting) && setModalOpen(false)}
                 className={`p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all ${
-                  saving ? "opacity-50 cursor-not-allowed" : ""
+                  saving || deleting ? "opacity-50 cursor-not-allowed" : ""
                 }`}
                 title="Fechar"
               >
@@ -468,6 +536,28 @@ function KpiDetailPageContent() {
             </div>
 
             <div className="p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldText
+                  label="KPI ID"
+                  hint="Código único do indicador. Ex: KPI-01."
+                  value={kpiIdEdit}
+                  onChange={(v: string) => setKpiIdEdit(v)}
+                />
+                <FieldText
+                  label="Texto do KPI"
+                  hint="Título principal exibido no detalhamento."
+                  value={kpiNameEdit}
+                  onChange={(v: string) => setKpiNameEdit(v)}
+                />
+              </div>
+
+              <FieldTextArea
+                label="Descrição do KPI"
+                hint="Texto explicativo detalhado do indicador."
+                value={kpiDescriptionEdit}
+                onChange={(v: string) => setKpiDescriptionEdit(v)}
+              />
+
               {/* Modo */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FieldSelect
@@ -559,10 +649,21 @@ function KpiDetailPageContent() {
 
             <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
               <button
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={saving || deleting}
+                className={`mr-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 bg-red-50 text-red-600 text-xs font-bold uppercase tracking-widest hover:bg-red-100 transition-all ${
+                  saving || deleting ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                {deleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                Excluir KPI
+              </button>
+
+              <button
                 onClick={() => setModalOpen(false)}
-                disabled={saving}
+                disabled={saving || deleting}
                 className={`px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-xs font-bold uppercase tracking-widest hover:bg-white transition-all ${
-                  saving ? "opacity-50 cursor-not-allowed" : ""
+                  saving || deleting ? "opacity-50 cursor-not-allowed" : ""
                 }`}
               >
                 Cancelar
@@ -570,11 +671,58 @@ function KpiDetailPageContent() {
 
               <button
                 onClick={onSave}
-                disabled={saving}
-                className={`btn-vtex flex items-center gap-2 ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
+                disabled={saving || deleting}
+                className={`btn-vtex flex items-center gap-2 ${saving || deleting ? "opacity-70 cursor-not-allowed" : ""}`}
               >
                 {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
                 Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAÇÃO EXCLUSÃO */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !deleting && setDeleteConfirmOpen(false)} />
+
+          <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl">
+            <div className="border-b border-slate-100 p-6">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Confirmação</div>
+              <div className="mt-1 flex items-center gap-2 text-lg font-semibold text-slate-900">
+                <AlertTriangle size={16} className="text-red-500" />
+                Excluir KPI
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-600">
+                Você está prestes a excluir o KPI <b>{detail?.kpi_id}</b>. Essa ação também remove execuções e revisões relacionadas.
+              </div>
+            </div>
+
+            <div className="border-b border-slate-100 bg-red-50/60 p-4 text-xs font-semibold text-red-700">
+              Essa ação é permanente e não pode ser desfeita.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 bg-slate-50 p-5">
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                disabled={deleting}
+                className={`rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-500 transition-all hover:bg-white ${
+                  deleting ? "cursor-not-allowed opacity-50" : ""
+                }`}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={onDeleteConfirmed}
+                disabled={deleting}
+                className={`inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-500 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white transition-all hover:bg-red-600 ${
+                  deleting ? "cursor-not-allowed opacity-70" : ""
+                }`}
+              >
+                {deleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                Confirmar exclusão
               </button>
             </div>
           </div>
@@ -668,6 +816,31 @@ function FieldText({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#f71963]/10 focus:border-[#f71963]"
+      />
+      {hint ? <div className="text-[11px] text-slate-500 font-medium">{hint}</div> : null}
+    </div>
+  )
+}
+
+function FieldTextArea({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#f71963]/10 focus:border-[#f71963] resize-y"
       />
       {hint ? <div className="text-[11px] text-slate-500 font-medium">{hint}</div> : null}
     </div>

@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
+import { isLocalhostBypassAllowed } from "@/lib/auth-bypass"
 
 type GoogleClientSecretFileShape = {
   installed?: { client_id?: string; client_secret?: string }
@@ -37,21 +38,26 @@ function resolveGoogleCredentials() {
     }
   }
 
+  if (isLocalhostBypassAllowed()) return null
+
   throw new Error(
     "Google SSO não configurado. Defina GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET ou adicione um arquivo client_secret_*.json na raiz do projeto.",
   )
 }
 
 const googleCredentials = resolveGoogleCredentials()
+const providers = googleCredentials
+  ? [
+      GoogleProvider({
+        clientId: googleCredentials.clientId,
+        clientSecret: googleCredentials.clientSecret,
+      }),
+    ]
+  : []
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "dev-only-change-this-secret",
-  providers: [
-    GoogleProvider({
-      clientId: googleCredentials.clientId,
-      clientSecret: googleCredentials.clientSecret,
-    }),
-  ],
+  providers,
   session: {
     strategy: "jwt",
   },

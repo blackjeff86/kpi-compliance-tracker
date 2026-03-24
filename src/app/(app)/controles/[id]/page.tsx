@@ -7,6 +7,7 @@ import Link from "next/link"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import {
   ChevronRight,
+  ArrowLeft,
   User,
   Headset,
   RefreshCw,
@@ -501,6 +502,13 @@ function DetalheControlePageContent() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50"
+          >
+            <ArrowLeft size={14} />
+            Voltar
+          </Link>
           <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Mês referência</div>
           <input
             type="month"

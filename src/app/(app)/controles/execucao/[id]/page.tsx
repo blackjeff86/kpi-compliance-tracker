@@ -146,6 +146,15 @@ function RegistrarExecucaoPageContent() {
   const kpiParam = safeText(searchParams.get("kpi"))
   const periodoISO = safeText(searchParams.get("periodo") || searchParams.get("period")) || getDefaultPeriodoISO()
   const periodoLabel = formatPeriodoLabel(periodoISO)
+  const backQuery = useMemo(() => searchParams?.toString() || "", [searchParams])
+  const backToControlHref = useMemo(
+    () => `/controles/${encodeURIComponent(id)}${backQuery ? `?${backQuery}` : ""}`,
+    [id, backQuery]
+  )
+  const backToControlesHref = useMemo(
+    () => `/controles${backQuery ? `?${backQuery}` : periodoISO ? `?periodo=${encodeURIComponent(periodoISO)}` : ""}`,
+    [backQuery, periodoISO]
+  )
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -394,7 +403,7 @@ function RegistrarExecucaoPageContent() {
         return
       }
 
-      router.push(`/controles/${encodeURIComponent(id)}?periodo=${encodeURIComponent(periodoISO)}`)
+      router.push(backToControlHref)
     } catch {
       setSaveError("Erro ao salvar no servidor.")
     } finally {
@@ -421,7 +430,7 @@ function RegistrarExecucaoPageContent() {
           </div>
           <p className="mt-2 text-sm text-slate-600">{loadError}</p>
           <div className="mt-4">
-            <Link href={`/controles?periodo=${encodeURIComponent(periodoISO)}`} className="text-[#f71866] font-bold text-sm">
+            <Link href={backToControlesHref} className="text-[#f71866] font-bold text-sm">
               Voltar para Controles
             </Link>
           </div>
@@ -447,11 +456,11 @@ function RegistrarExecucaoPageContent() {
       <header className="px-8 py-6 flex justify-between items-center bg-white border-b border-slate-100 sticky top-0 z-50">
         <div className="flex flex-col">
           <nav className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-            <Link href={`/controles?periodo=${encodeURIComponent(periodoISO)}`} className="hover:text-[#f71866] transition-colors">
+            <Link href={backToControlesHref} className="hover:text-[#f71866] transition-colors">
               Controles
             </Link>
             <span>/</span>
-            <Link href={`/controles/${encodeURIComponent(id)}?periodo=${encodeURIComponent(periodoISO)}`} className="hover:text-[#f71866] transition-colors">
+            <Link href={backToControlHref} className="hover:text-[#f71866] transition-colors">
               {id}
             </Link>
             <span>/</span>
@@ -460,6 +469,14 @@ function RegistrarExecucaoPageContent() {
 
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Registrar Execução de KPI</h1>
         </div>
+
+        <Link
+          href={backToControlHref}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50"
+        >
+          <ArrowLeft size={14} />
+          Voltar
+        </Link>
       </header>
 
       <main className="max-w-6xl mx-auto w-full p-8 space-y-6">

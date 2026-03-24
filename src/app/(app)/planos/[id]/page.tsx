@@ -1,9 +1,10 @@
 "use client"
 
-import React, { Suspense, useCallback, useEffect, useState } from "react"
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import {
+  ArrowLeft,
   ChevronRight,
   AlertTriangle,
   MessageSquarePlus,
@@ -335,6 +336,10 @@ function PlanoDetalhePageContent() {
   const searchParams = useSearchParams()
   const searchParamsKey = searchParams.toString()
   const id = decodeURIComponent(params?.id || "PA-2023-084")
+  const backHref = useMemo(() => {
+    const qs = searchParams?.toString() || ""
+    return qs ? `/planos?${qs}` : "/planos"
+  }, [searchParams])
   const [plano, setPlano] = useState<PlanoDetalhe>(getFallbackPlano(id))
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -468,7 +473,7 @@ function PlanoDetalhePageContent() {
     <div className="w-full space-y-8 animate-in fade-in duration-500">
       <header className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
         <nav className="flex items-center space-x-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
-          <Link href="/planos" className="hover:text-[#f71866] transition-colors">
+          <Link href={backHref} className="hover:text-[#f71866] transition-colors">
             Planos de Ação
           </Link>
           <ChevronRight className="h-3 w-3" />
@@ -482,6 +487,13 @@ function PlanoDetalhePageContent() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              href={backHref}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition-all hover:bg-slate-50"
+            >
+              <ArrowLeft size={14} />
+              Voltar
+            </Link>
             <button
               onClick={() => setCommentModalOpen(true)}
               className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 inline-flex items-center gap-2 transition-all"

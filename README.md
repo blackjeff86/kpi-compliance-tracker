@@ -16,6 +16,16 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+### Bypass de autenticação no localhost (dev)
+
+Em ambiente não-produtivo, ao acessar pelo host `localhost` (ou `127.0.0.1`), o app libera acesso sem exigir Google SSO.
+
+Opcionalmente, você pode definir o e-mail usado internamente nesse bypass:
+
+```env
+LOCALHOST_BYPASS_EMAIL=seu.email@empresa.com
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
