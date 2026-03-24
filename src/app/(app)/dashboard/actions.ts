@@ -16,6 +16,7 @@ type DashboardResult =
           total: number
           applicableControls: number
           coveredApplicableControls: number
+          partialApplicableControls: number
           notApplicableControls: number
           pendingReviews: number
           overduePlans: number
@@ -155,11 +156,12 @@ export async function fetchDashboardData(params?: {
             COUNT(*)::int AS total,
             SUM(CASE WHEN pc.is_not_applicable THEN 0 ELSE 1 END)::int AS applicable_controls,
             SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.with_run > 0 THEN 1 ELSE 0 END)::int AS covered_applicable_controls,
+            SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.with_run > 0 AND pc.with_run < pc.total_kpis THEN 1 ELSE 0 END)::int AS partial_applicable_controls,
             SUM(CASE WHEN pc.is_not_applicable THEN 1 ELSE 0 END)::int AS not_applicable_controls,
             SUM(CASE WHEN pc.with_run < pc.total_kpis THEN 1 ELSE 0 END)::int AS pending_reviews
           FROM per_control pc
         `
-      : [{ green_count: 0, yellow_count: 0, red_count: 0, total: 0, applicable_controls: 0, covered_applicable_controls: 0, not_applicable_controls: 0, pending_reviews: 0 }]
+      : [{ green_count: 0, yellow_count: 0, red_count: 0, total: 0, applicable_controls: 0, covered_applicable_controls: 0, partial_applicable_controls: 0, not_applicable_controls: 0, pending_reviews: 0 }]
 
     const summary = {
       greenCount: toInt(statusRows[0]?.green_count),
@@ -168,6 +170,7 @@ export async function fetchDashboardData(params?: {
       total: toInt(statusRows[0]?.total),
       applicableControls: toInt(statusRows[0]?.applicable_controls),
       coveredApplicableControls: toInt(statusRows[0]?.covered_applicable_controls),
+      partialApplicableControls: toInt(statusRows[0]?.partial_applicable_controls),
       notApplicableControls: toInt(statusRows[0]?.not_applicable_controls),
       pendingReviews: 0,
       overduePlans: 0,

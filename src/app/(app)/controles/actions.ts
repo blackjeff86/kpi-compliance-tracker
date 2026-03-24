@@ -349,7 +349,7 @@ function resolveFrequencyFromRow(c: any) {
  * ✅ Agora já traz:
  * - exec_done / exec_total
  * - green/yellow/red counts
- * - status_final (EM ABERTO | CONFORME | EM ATENÇÃO | NÃO CONFORME | NÃO APLICÁVEL)
+ * - status_final (EM ABERTO | PARCIAL | CONFORME | EM ATENÇÃO | NÃO CONFORME | NÃO APLICÁVEL)
  *
  * Regras de aplicabilidade por frequência (com base no mês do "period"):
  * - Mensal: sempre aplicável
@@ -501,6 +501,7 @@ export async function fetchControles(params?: { period?: string }) {
           -- mensal (ou qualquer outro default): segue regra atual
           WHEN COALESCE(a.grc_reprovado_count, 0) > 0 THEN 'REPROVADO'
           WHEN COALESCE(kt.exec_total, 0) = 0 THEN 'EM ABERTO'
+          WHEN COALESCE(a.exec_done, 0) > 0 AND COALESCE(a.exec_done, 0) < COALESCE(kt.exec_total, 0) THEN 'PARCIAL'
           WHEN COALESCE(a.exec_done, 0) < COALESCE(kt.exec_total, 0) THEN 'EM ABERTO'
           WHEN COALESCE(a.red_count, 0) > 0 THEN 'NÃO CONFORME'
           WHEN COALESCE(a.yellow_count, 0) > 0 THEN 'EM ATENÇÃO'

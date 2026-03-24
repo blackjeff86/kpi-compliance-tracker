@@ -105,6 +105,7 @@ export default function DashboardPage() {
     total: 0,
     applicableControls: 0,
     coveredApplicableControls: 0,
+    partialApplicableControls: 0,
     notApplicableControls: 0,
     pendingReviews: 0,
     overduePlans: 0,
@@ -163,6 +164,7 @@ export default function DashboardPage() {
   const effectiveControls = summary.greenCount + summary.yellowCount
   const applicableControls = summary.applicableControls
   const coveredApplicableControls = summary.coveredApplicableControls
+  const partialApplicableControls = summary.partialApplicableControls
   const notApplicableControls = summary.notApplicableControls
 
   const limparFiltros = () => {
@@ -239,14 +241,14 @@ export default function DashboardPage() {
             <StatusCard
               label="KPI Coverage Rate"
               value={toPercent(coveredApplicableControls, applicableControls)}
-              subValue={`${coveredApplicableControls} de ${applicableControls} controles com execução (${notApplicableControls} N/A fora da conta)`}
+              subValue={`${coveredApplicableControls} de ${applicableControls} controles com execução (${partialApplicableControls} parciais | ${notApplicableControls} N/A fora da conta)`}
               color="amber"
               icon={<BarChart3 />}
             />
             <StatusCard
               label="Effectiveness Rate"
               value={toPercent(effectiveControls, applicableControls)}
-              subValue={`${effectiveControls} de ${applicableControls} controles efetivos (${notApplicableControls} N/A fora da conta)`}
+              subValue={`${effectiveControls} de ${applicableControls} controles efetivos (${partialApplicableControls} parciais | ${notApplicableControls} N/A fora da conta)`}
               color="emerald"
               icon={<ShieldCheck />}
             />
