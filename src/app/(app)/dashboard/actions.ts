@@ -27,6 +27,13 @@ type DashboardResult =
           yellow: number
           red: number
         }>
+        chartByFramework: Array<{
+          framework: string
+          green: number
+          yellow: number
+          red: number
+          total: number
+        }>
         immediateItems: Array<{
           kpiRef: string
           code: string
@@ -230,6 +237,39 @@ export async function fetchDashboardData(params?: {
         red: toInt(row.red),
       }))
 
+    const byFrameworkRows = selectedPeriod
+      ? await sql`
+          WITH last_run AS (
+            SELECT DISTINCT ON (kr.kpi_uuid)
+              kr.kpi_uuid,
+              kr.status::text AS status
+            FROM kpi_runs kr
+            WHERE kr.period = ${selectedPeriod}
+            ORDER BY kr.kpi_uuid, kr.is_latest DESC NULLS LAST, kr.updated_at DESC NULLS LAST, kr.created_at DESC NULLS LAST
+          )
+          SELECT
+            COALESCE(c.framework, 'N/A') AS framework,
+            SUM(CASE WHEN lr.status = 'GREEN' THEN 1 ELSE 0 END)::int AS green,
+            SUM(CASE WHEN lr.status = 'YELLOW' THEN 1 ELSE 0 END)::int AS yellow,
+            SUM(CASE WHEN lr.status = 'RED' THEN 1 ELSE 0 END)::int AS red,
+            SUM(CASE WHEN lr.status IN ('GREEN', 'YELLOW', 'RED') THEN 1 ELSE 0 END)::int AS total
+          FROM control_kpis ck
+          JOIN controls c ON c.id_control = ck.id_control
+          LEFT JOIN last_run lr ON lr.kpi_uuid = ck.kpi_uuid
+          WHERE (${framework}::text IS NULL OR ${framework} = '' OR c.framework = ${framework})
+          GROUP BY COALESCE(c.framework, 'N/A')
+          ORDER BY total DESC, framework ASC
+        `
+      : []
+
+    const chartByFramework = byFrameworkRows.map((row) => ({
+      framework: safeText(row.framework) || "N/A",
+      green: toInt(row.green),
+      yellow: toInt(row.yellow),
+      red: toInt(row.red),
+      total: toInt(row.total),
+    }))
+
     const immediateRows = selectedPeriod
       ? await sql`
           WITH last_run AS (
@@ -282,6 +322,7 @@ export async function fetchDashboardData(params?: {
         periodOptions,
         summary,
         chartData,
+        chartByFramework,
         immediateItems,
       },
     }

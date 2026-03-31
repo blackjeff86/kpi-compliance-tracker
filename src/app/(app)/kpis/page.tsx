@@ -13,6 +13,8 @@ import {
   TrendingUp,
   AlertCircle,
   Loader2,
+  X,
+  Save,
 } from "lucide-react"
 import { buildMonthOptions, getPreviousMonthISO, resolveReferenceMonth } from "@/lib/utils"
 
@@ -20,7 +22,7 @@ import { buildMonthOptions, getPreviousMonthISO, resolveReferenceMonth } from "@
 import { fetchKPIs } from "../controles/actions"
 
 // ✅ NOVO: buscar runs do período (ATUAL + STATUS)
-import { fetchLatestKpiRunsForPeriod } from "./actions"
+import { createKpiFromCatalog, fetchKpiCreationOptions, fetchLatestKpiRunsForPeriod } from "./actions"
 
 type KPIRecord = {
   id: string
@@ -34,6 +36,15 @@ type KPIRecord = {
   corStatus: string
   grc_final_status: string
   grc_review_comment: string
+}
+
+type KpiEvaluationMode = "UP" | "DOWN" | "BOOLEAN"
+
+type ControlOption = {
+  id_control: string
+  name_control: string
+  framework: string
+  kpi_count: number
 }
 
 function safeText(v: any) {
@@ -148,6 +159,12 @@ function extractKpiNumber(code: any): number {
   return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY
 }
 
+function normalizeMode(v: any): KpiEvaluationMode {
+  const s = String(v || "").trim().toUpperCase()
+  if (s === "UP" || s === "DOWN" || s === "BOOLEAN") return s
+  return "UP"
+}
+
 export default function KPIsPage() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-sm text-slate-500">Carregando KPIs...</div>}>
@@ -175,6 +192,37 @@ function KPIsPageContent() {
   const [kpisData, setKpisData] = useState<KPIRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadTick, setReloadTick] = useState(0)
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [savingCreate, setSavingCreate] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createOk, setCreateOk] = useState<string | null>(null)
+  const [creationOptionsLoading, setCreationOptionsLoading] = useState(false)
+  const [controlOptions, setControlOptions] = useState<ControlOption[]>([])
+  const [creationFrameworks, setCreationFrameworks] = useState<string[]>([])
+
+  const [createForm, setCreateForm] = useState<{
+    framework: string
+    id_control: string
+    kpi_name: string
+    kpi_description: string
+    kpi_type: string
+    kpi_evaluation_mode: KpiEvaluationMode
+    kpi_target: string
+    yellow_ratio: number
+    zero_meta_yellow_max: number
+  }>({
+    framework: "",
+    id_control: "",
+    kpi_name: "",
+    kpi_description: "",
+    kpi_type: "Manual",
+    kpi_evaluation_mode: "UP",
+    kpi_target: "0",
+    yellow_ratio: 0.9,
+    zero_meta_yellow_max: 1,
+  })
 
   /**
    * ✅ Boot:
@@ -312,7 +360,7 @@ function KPIsPageContent() {
         })
 
         setKpisData(mapped)
-      } catch (e: any) {
+      } catch {
         setLoadError("Erro ao conectar com o servidor.")
         setKpisData([])
       } finally {
@@ -321,12 +369,105 @@ function KPIsPageContent() {
     }
 
     load()
-  }, [selectedMonth])
+  }, [selectedMonth, reloadTick])
+
+  useEffect(() => {
+    async function loadCreationOptions() {
+      setCreationOptionsLoading(true)
+      try {
+        const res = await fetchKpiCreationOptions()
+        if (!res?.success) return
+
+        const controls = Array.isArray(res.data?.controls) ? (res.data.controls as ControlOption[]) : []
+        const frameworks = Array.isArray(res.data?.frameworks) ? res.data.frameworks.map((f) => String(f)) : []
+
+        setControlOptions(controls)
+        setCreationFrameworks(frameworks)
+      } finally {
+        setCreationOptionsLoading(false)
+      }
+    }
+
+    loadCreationOptions()
+  }, [])
+
+  const availableControlsForCreate = useMemo(() => {
+    if (!createForm.framework) return controlOptions
+    return controlOptions.filter((c) => safeText(c.framework) === safeText(createForm.framework))
+  }, [controlOptions, createForm.framework])
+
+  const resetCreateForm = () => {
+    setCreateForm({
+      framework: "",
+      id_control: "",
+      kpi_name: "",
+      kpi_description: "",
+      kpi_type: "Manual",
+      kpi_evaluation_mode: "UP",
+      kpi_target: "0",
+      yellow_ratio: 0.9,
+      zero_meta_yellow_max: 1,
+    })
+    setCreateError(null)
+    setCreateOk(null)
+  }
+
+  const onOpenCreateModal = () => {
+    resetCreateForm()
+    setIsCreateModalOpen(true)
+  }
+
+  const onSaveNewIndicator = async () => {
+    if (savingCreate) return
+    setCreateError(null)
+    setCreateOk(null)
+
+    if (!safeText(createForm.id_control)) {
+      setCreateError("Selecione o controle associado ao KPI.")
+      return
+    }
+    if (!safeText(createForm.kpi_name)) {
+      setCreateError("Preencha o nome do KPI.")
+      return
+    }
+    if (!safeText(createForm.kpi_target)) {
+      setCreateError("Preencha a meta do KPI.")
+      return
+    }
+
+    setSavingCreate(true)
+    try {
+      const res = await createKpiFromCatalog({
+        id_control: createForm.id_control,
+        kpi_name: createForm.kpi_name,
+        kpi_description: createForm.kpi_description,
+        kpi_type: createForm.kpi_type,
+        kpi_target: createForm.kpi_target,
+        kpi_evaluation_mode: normalizeMode(createForm.kpi_evaluation_mode),
+        yellow_ratio: createForm.yellow_ratio,
+        zero_meta_yellow_max: createForm.zero_meta_yellow_max,
+        reference_month: selectedMonth || null,
+      })
+
+      if (!res?.success) {
+        setCreateError(res?.error || "Falha ao criar KPI.")
+        return
+      }
+
+      setCreateOk("KPI criado com sucesso.")
+      setIsCreateModalOpen(false)
+      setReloadTick((v) => v + 1)
+    } catch {
+      setCreateError("Falha ao criar KPI.")
+    } finally {
+      setSavingCreate(false)
+    }
+  }
 
   const frameworkOptions = useMemo(() => {
-    const fromData = Array.from(new Set(kpisData.map((k) => safeText(k.framework)).filter(Boolean)))
-    const fixed = ["SOX", "ISO 27001", "SOC2", "NIST"]
-    return Array.from(new Set([...fixed, ...fromData])).sort((a, b) => a.localeCompare(b))
+    return Array.from(new Set(kpisData.map((k) => safeText(k.framework)).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    )
   }, [kpisData])
 
   const typeOptions = useMemo(() => {
@@ -421,7 +562,10 @@ function KPIsPageContent() {
             Monitore as métricas de conformidade e performance em tempo real.
           </p>
         </div>
-        <button className="bg-[#f71866] hover:bg-[#d61556] text-white px-6 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#f71866]/20 transition-all active:scale-95">
+        <button
+          onClick={onOpenCreateModal}
+          className="bg-[#f71866] hover:bg-[#d61556] text-white px-6 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#f71866]/20 transition-all active:scale-95"
+        >
           <Plus className="h-5 w-5" />
           Novo Indicador
         </button>
@@ -523,6 +667,12 @@ function KPIsPageContent() {
         {loadError && (
           <div className="mt-4 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
             {loadError}
+          </div>
+        )}
+
+        {createOk && (
+          <div className="mt-4 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+            {createOk}
           </div>
         )}
       </div>
@@ -659,6 +809,224 @@ function KPIsPageContent() {
           </div>
         </div>
       </div>
+
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => {
+              if (savingCreate) return
+              setIsCreateModalOpen(false)
+            }}
+          />
+
+          <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-2xl">
+            <div className="border-b border-slate-100 p-6 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Cadastrar Novo KPI</h3>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  Defina o vínculo com framework/controle e as regras de avaliação da métrica.
+                </p>
+              </div>
+
+              <button
+                onClick={() => !savingCreate && setIsCreateModalOpen(false)}
+                className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all"
+                title="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Framework</label>
+                  <select
+                    value={createForm.framework}
+                    onChange={(e) => {
+                      const nextFramework = e.target.value
+                      setCreateForm((prev) => {
+                        const sameControl = controlOptions.find((c) => c.id_control === prev.id_control)
+                        const keepControl = sameControl && sameControl.framework === nextFramework
+                        return {
+                          ...prev,
+                          framework: nextFramework,
+                          id_control: keepControl ? prev.id_control : "",
+                        }
+                      })
+                    }}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                  >
+                    <option value="">Selecione um framework</option>
+                    {creationFrameworks.map((fw) => (
+                      <option key={fw} value={fw}>
+                        {fw}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle</label>
+                  <select
+                    value={createForm.id_control}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, id_control: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                  >
+                    <option value="">{creationOptionsLoading ? "Carregando controles..." : "Selecione um controle"}</option>
+                    {availableControlsForCreate.map((control) => (
+                      <option key={control.id_control} value={control.id_control}>
+                        {control.id_control} - {control.name_control || "Sem nome"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome do KPI</label>
+                  <input
+                    value={createForm.kpi_name}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, kpi_name: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                    placeholder="Ex.: Cobertura de treinamento acima da meta"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo</label>
+                  <select
+                    value={createForm.kpi_type}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, kpi_type: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                  >
+                    <option value="Manual">Manual</option>
+                    <option value="Automated">Automated</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Descrição e regra de métrica</label>
+                <textarea
+                  value={createForm.kpi_description}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, kpi_description: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866] min-h-[96px]"
+                  placeholder="Descreva a fórmula, fonte de dados, periodicidade, limites e observações da métrica."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Modo de avaliação</label>
+                  <select
+                    value={createForm.kpi_evaluation_mode}
+                    onChange={(e) =>
+                      setCreateForm((prev) => {
+                        const mode = normalizeMode(e.target.value)
+                        return {
+                          ...prev,
+                          kpi_evaluation_mode: mode,
+                          kpi_target: mode === "BOOLEAN" ? "true" : prev.kpi_target || "0",
+                        }
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                  >
+                    <option value="UP">Quanto maior, melhor (UP)</option>
+                    <option value="DOWN">Quanto menor, melhor (DOWN)</option>
+                    <option value="BOOLEAN">Sim / Não (BOOLEAN)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Meta</label>
+                  {createForm.kpi_evaluation_mode === "BOOLEAN" ? (
+                    <select
+                      value={String(createForm.kpi_target).toLowerCase() === "false" ? "false" : "true"}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, kpi_target: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                    >
+                      <option value="true">Sim (true)</option>
+                      <option value="false">Não (false)</option>
+                    </select>
+                  ) : (
+                    <input
+                      value={createForm.kpi_target}
+                      onChange={(e) => setCreateForm((prev) => ({ ...prev, kpi_target: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                      placeholder="Ex.: 95"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {createForm.kpi_evaluation_mode !== "BOOLEAN" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Faixa YELLOW (yellow_ratio)</label>
+                    <input
+                      type="number"
+                      min={0.01}
+                      max={0.999}
+                      step={0.01}
+                      value={createForm.yellow_ratio}
+                      onChange={(e) =>
+                        setCreateForm((prev) => ({ ...prev, yellow_ratio: Number(e.target.value || 0.9) }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Buffer YELLOW DOWN</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={createForm.zero_meta_yellow_max}
+                      onChange={(e) =>
+                        setCreateForm((prev) => ({ ...prev, zero_meta_yellow_max: Number(e.target.value || 1) }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f71866]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {createError && (
+                <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-600">
+                  {createError}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100 bg-slate-50 p-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => !savingCreate && setIsCreateModalOpen(false)}
+                disabled={savingCreate}
+                className={`px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-xs font-bold uppercase tracking-widest hover:bg-white transition-all ${
+                  savingCreate ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={onSaveNewIndicator}
+                disabled={savingCreate}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest text-white bg-[#f71866] hover:bg-[#d61556] inline-flex items-center gap-2 ${
+                  savingCreate ? "opacity-60 cursor-not-allowed" : ""
+                }`}
+              >
+                {savingCreate ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                Salvar KPI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

@@ -43,6 +43,14 @@ type ChartPoint = {
   red: number
 }
 
+type FrameworkChartPoint = {
+  framework: string
+  green: number
+  yellow: number
+  red: number
+  total: number
+}
+
 function safeText(v: unknown) {
   if (v === null || v === undefined) return ""
   return String(v).trim()
@@ -87,12 +95,26 @@ function toPercent(value: number, total: number) {
   return `${Math.round(pct)}%`
 }
 
+function formatChartValue(value: number | string | readonly (number | string)[] | undefined, unit: "ABS" | "PCT") {
+  if (Array.isArray(value)) {
+    const first = value[0]
+    const n = Number(first)
+    if (!Number.isFinite(n)) return "-"
+    return unit === "PCT" ? `${n}%` : n
+  }
+  const n = Number(value)
+  if (!Number.isFinite(n)) return "-"
+  return unit === "PCT" ? `${n}%` : n
+}
+
 export default function DashboardPage() {
   const [filterFramework, setFilterFramework] = useState("Todos")
   const [filterPeriodo, setFilterPeriodo] = useState(getPreviousMonthISO())
 
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [chartView, setChartView] = useState<"TREND" | "FRAMEWORK">("TREND")
+  const [chartUnit, setChartUnit] = useState<"ABS" | "PCT">("ABS")
 
   const [frameworkOptions, setFrameworkOptions] = useState<string[]>([])
   const [periodOptions, setPeriodOptions] = useState<string[]>([])
@@ -111,6 +133,7 @@ export default function DashboardPage() {
     overduePlans: 0,
   })
   const [chartData, setChartData] = useState<ChartPoint[]>([])
+  const [chartByFramework, setChartByFramework] = useState<FrameworkChartPoint[]>([])
   const [tableItems, setTableItems] = useState<DashboardItem[]>([])
 
   useEffect(() => {
@@ -137,6 +160,7 @@ export default function DashboardPage() {
       setSelectedPeriodResolved(payload.selectedPeriod)
       setSummary(payload.summary)
       setChartData(payload.chartData)
+      setChartByFramework(Array.isArray(payload.chartByFramework) ? payload.chartByFramework : [])
       setTableItems(payload.immediateItems)
       setLoading(false)
     }
@@ -153,13 +177,55 @@ export default function DashboardPage() {
   }, [tableItems, filterFramework, filterPeriodo])
 
   const chartDataUi = useMemo(() => {
-    return chartData.map((item) => ({
-      name: formatPeriodLabel(item.period),
-      Green: item.green,
-      Yellow: item.yellow,
-      Red: item.red,
-    }))
-  }, [chartData])
+    return chartData.map((item) => {
+      const total = item.green + item.yellow + item.red || 1
+      return {
+        name: formatPeriodLabel(item.period),
+        Green: chartUnit === "PCT" ? Number(((item.green / total) * 100).toFixed(1)) : item.green,
+        Yellow: chartUnit === "PCT" ? Number(((item.yellow / total) * 100).toFixed(1)) : item.yellow,
+        Red: chartUnit === "PCT" ? Number(((item.red / total) * 100).toFixed(1)) : item.red,
+      }
+    })
+  }, [chartData, chartUnit])
+
+  const chartByFrameworkUi = useMemo(() => {
+    const sorted = [...chartByFramework]
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.total - a.total || a.framework.localeCompare(b.framework))
+
+    const topLimit = 8
+    const top = sorted.slice(0, topLimit)
+    const tail = sorted.slice(topLimit)
+
+    if (tail.length > 0) {
+      const other = tail.reduce(
+        (acc, item) => ({
+          framework: "Outros",
+          green: acc.green + item.green,
+          yellow: acc.yellow + item.yellow,
+          red: acc.red + item.red,
+          total: acc.total + item.total,
+        }),
+        { framework: "Outros", green: 0, yellow: 0, red: 0, total: 0 },
+      )
+      top.push(other)
+    }
+
+    return top.map((row) => {
+      const total = row.total || 1
+      const greenPct = Number(((row.green / total) * 100).toFixed(1))
+      const yellowPct = Number(((row.yellow / total) * 100).toFixed(1))
+      const redPct = Number(((row.red / total) * 100).toFixed(1))
+
+      return {
+        name: row.framework,
+        total: row.total,
+        Green: chartUnit === "PCT" ? greenPct : row.green,
+        Yellow: chartUnit === "PCT" ? yellowPct : row.yellow,
+        Red: chartUnit === "PCT" ? redPct : row.red,
+      }
+    })
+  }, [chartByFramework, chartUnit])
 
   const effectiveControls = summary.greenCount + summary.yellowCount
   const applicableControls = summary.applicableControls
@@ -273,22 +339,108 @@ export default function DashboardPage() {
 
           <div className="bg-white border border-slate-100 p-6 rounded-xl shadow-sm">
             <div className="flex items-center justify-between mb-8">
-              <h3 className="text-lg font-bold text-slate-800 tracking-tight">Tendência - Últimos 6 Períodos</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setChartView("TREND")}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-all ${
+                    chartView === "TREND" ? "bg-[#f71866] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Tendência
+                </button>
+                <button
+                  onClick={() => setChartView("FRAMEWORK")}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-all ${
+                    chartView === "FRAMEWORK" ? "bg-[#f71866] text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Por Framework
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setChartUnit("ABS")}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                    chartUnit === "ABS" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Qtd
+                </button>
+                <button
+                  onClick={() => setChartUnit("PCT")}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                    chartUnit === "PCT" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  %
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800 tracking-tight">
+                {chartView === "TREND" ? "Tendência - Últimos 6 Períodos" : "Comparativo por Framework"}
+              </h3>
               <div className="text-xs text-slate-400 font-semibold">Período base: {safeText(selectedPeriodResolved) || "N/A"}</div>
             </div>
             <div className="h-[320px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartDataUi} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#94a3b8" }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#94a3b8" }} />
-                  <Tooltip cursor={{ fill: "#f8fafc" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }} />
-                  <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: "30px", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.05em" }} />
-                  <Bar dataKey="Green" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
-                  <Bar dataKey="Yellow" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={40} />
-                  <Bar dataKey="Red" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
+              {chartView === "TREND" ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartDataUi} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#94a3b8" }} dy={10} />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fontWeight: 700, fill: "#94a3b8" }}
+                      domain={chartUnit === "PCT" ? [0, 100] : undefined}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "#f8fafc" }}
+                      contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
+                      formatter={(value) => formatChartValue(value, chartUnit)}
+                    />
+                    <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: "30px", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.05em" }} />
+                    <Bar dataKey="Green" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Bar dataKey="Yellow" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={40} />
+                    <Bar dataKey="Red" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : chartByFrameworkUi.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartByFrameworkUi} layout="vertical" margin={{ top: 5, right: 20, left: 80, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis
+                      type="number"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fontWeight: 700, fill: "#94a3b8" }}
+                      domain={chartUnit === "PCT" ? [0, 100] : undefined}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={140}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fontWeight: 700, fill: "#64748b" }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "#f8fafc" }}
+                      contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)" }}
+                      formatter={(value) => formatChartValue(value, chartUnit)}
+                    />
+                    <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ paddingTop: "30px", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.05em" }} />
+                    <Bar dataKey="Green" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} barSize={22} />
+                    <Bar dataKey="Yellow" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={22} />
+                    <Bar dataKey="Red" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} barSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-sm text-slate-400 font-medium">
+                  Sem dados por framework no período selecionado.
+                </div>
+              )}
             </div>
           </div>
 

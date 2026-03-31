@@ -105,6 +105,7 @@ function parseMultiParam(raw: string) {
 function buildControlsQuery(params: {
   periodo?: string
   q?: string
+  framework?: string[]
   risco?: string[]
   status?: string[]
   owner?: string[]
@@ -116,6 +117,7 @@ function buildControlsQuery(params: {
 
   if (params.periodo) sp.set("periodo", params.periodo)
   if (params.q) sp.set("q", params.q)
+  if (params.framework && params.framework.length > 0) sp.set("framework", params.framework.join(","))
   if (params.risco && params.risco.length > 0) sp.set("risco", params.risco.join(","))
   if (params.status && params.status.length > 0) sp.set("status", params.status.join(","))
   if (params.owner && params.owner.length > 0) sp.set("owner", params.owner.join(","))
@@ -145,6 +147,7 @@ function ControlesPageContent() {
   const [currentPage, setCurrentPage] = useState(1)
 
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedFrameworks, setSelectedFrameworks] = useState<string[]>([])
   const [selectedRiscos, setSelectedRiscos] = useState<string[]>([])
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
   const [selectedOwners, setSelectedOwners] = useState<string[]>([])
@@ -162,7 +165,7 @@ function ControlesPageContent() {
   /**
    * ✅ Boot:
    * - monta lista de meses
-   * - restaura filtros da URL (periodo, q, risco, status, owner, focal, frequencia, page)
+   * - restaura filtros da URL (periodo, q, framework, risco, status, owner, focal, frequencia, page)
    * - garante mês válido
    */
   useEffect(() => {
@@ -171,6 +174,7 @@ function ControlesPageContent() {
 
     const urlPeriodo = safeText(searchParams.get("periodo") || searchParams.get("period"))
     const urlQ = safeText(searchParams.get("q"))
+    const urlFrameworks = parseMultiParam(safeText(searchParams.get("framework")))
     const urlRiscos = parseMultiParam(safeText(searchParams.get("risco")))
     const urlStatuses = parseMultiParam(safeText(searchParams.get("status")))
     const urlOwners = parseMultiParam(safeText(searchParams.get("owner")))
@@ -179,6 +183,7 @@ function ControlesPageContent() {
     const urlPage = clampPage(Number(searchParams.get("page") || 1))
 
     if (urlQ) setSearchTerm(urlQ)
+    setSelectedFrameworks(urlFrameworks)
     setSelectedRiscos(urlRiscos)
     setSelectedStatuses(urlStatuses)
     setSelectedOwners(urlOwners)
@@ -204,6 +209,7 @@ function ControlesPageContent() {
     const qs = buildControlsQuery({
       periodo: selectedMonth,
       q: searchTerm || undefined,
+      framework: selectedFrameworks,
       risco: selectedRiscos,
       status: selectedStatuses,
       owner: selectedOwners,
@@ -216,6 +222,7 @@ function ControlesPageContent() {
   }, [
     selectedMonth,
     searchTerm,
+    selectedFrameworks,
     selectedRiscos,
     selectedStatuses,
     selectedOwners,
@@ -318,6 +325,9 @@ function ControlesPageContent() {
 
       const matchSearch = !q || haystack.includes(q)
 
+      const matchFramework =
+        selectedFrameworks.length === 0 || selectedFrameworks.includes(safeText(item.framework))
+
       const matchRisco =
         selectedRiscos.length === 0 ||
         selectedRiscos.some((risk) => safeText(item.risco).toLowerCase().includes(safeText(risk).toLowerCase()))
@@ -330,9 +340,15 @@ function ControlesPageContent() {
       const matchFrequencia =
         selectedFrequencias.length === 0 || selectedFrequencias.includes(safeText(item.frequencia))
 
-      return matchSearch && matchRisco && matchStatus && matchOwner && matchFocal && matchFrequencia
+      return matchSearch && matchFramework && matchRisco && matchStatus && matchOwner && matchFocal && matchFrequencia
     })
-  }, [searchTerm, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, processedData])
+  }, [searchTerm, selectedFrameworks, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, processedData])
+
+  const frameworksList = useMemo(() => {
+    return Array.from(new Set(controles.map((c) => safeText(c.framework))))
+      .filter((f) => Boolean(f))
+      .sort((a, b) => a.localeCompare(b))
+  }, [controles])
 
   const ownersList = useMemo(() => {
     return Array.from(new Set(controles.map((c) => safeText(c.control_owner))))
@@ -363,7 +379,7 @@ function ControlesPageContent() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, selectedMonth])
+  }, [searchTerm, selectedFrameworks, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, selectedMonth])
 
   const getRiskStyles = (risco: string) => {
     const r = (risco || "").toLowerCase()
@@ -412,6 +428,7 @@ function ControlesPageContent() {
     return buildControlsQuery({
       periodo: selectedMonth,
       q: searchTerm || undefined,
+      framework: selectedFrameworks,
       risco: selectedRiscos,
       status: selectedStatuses,
       owner: selectedOwners,
@@ -419,7 +436,7 @@ function ControlesPageContent() {
       frequencia: selectedFrequencias,
       page: currentPage,
     })
-  }, [selectedMonth, searchTerm, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, currentPage])
+  }, [selectedMonth, searchTerm, selectedFrameworks, selectedRiscos, selectedStatuses, selectedOwners, selectedFocals, selectedFrequencias, currentPage])
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
@@ -460,7 +477,7 @@ function ControlesPageContent() {
       </div>
 
       <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-8 gap-4 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-9 gap-4 items-center">
           <div className="relative">
             <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f71866] h-4 w-4" />
             <select
@@ -491,6 +508,13 @@ function ControlesPageContent() {
               placeholder="Buscar por ID, Nome, Risco, Status, Framework, Owner, Focal..."
             />
           </div>
+
+          <MultiSelectFilter
+            label="Framework"
+            options={frameworksList}
+            selected={selectedFrameworks}
+            onChange={setSelectedFrameworks}
+          />
 
           <MultiSelectFilter
             label="Risco"
@@ -530,6 +554,7 @@ function ControlesPageContent() {
           <button
             onClick={() => {
               setSearchTerm("")
+              setSelectedFrameworks([])
               setSelectedRiscos([])
               setSelectedStatuses([])
               setSelectedOwners([])
