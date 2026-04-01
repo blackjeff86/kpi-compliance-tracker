@@ -157,9 +157,9 @@ export async function fetchDashboardData(params?: {
             GROUP BY c.id_control, c.frequency
           )
           SELECT
-            SUM(CASE WHEN pc.with_run = pc.total_kpis AND pc.red_count = 0 AND pc.yellow_count = 0 AND pc.green_count > 0 THEN 1 ELSE 0 END)::int AS green_count,
-            SUM(CASE WHEN pc.with_run > 0 AND pc.red_count = 0 AND pc.yellow_count > 0 THEN 1 ELSE 0 END)::int AS yellow_count,
-            SUM(CASE WHEN pc.red_count > 0 THEN 1 ELSE 0 END)::int AS red_count,
+            SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.with_run = pc.total_kpis AND pc.red_count = 0 AND pc.yellow_count = 0 AND pc.green_count > 0 THEN 1 ELSE 0 END)::int AS green_count,
+            SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.with_run > 0 AND pc.red_count = 0 AND pc.yellow_count > 0 THEN 1 ELSE 0 END)::int AS yellow_count,
+            SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.red_count > 0 THEN 1 ELSE 0 END)::int AS red_count,
             COUNT(*)::int AS total,
             SUM(CASE WHEN pc.is_not_applicable THEN 0 ELSE 1 END)::int AS applicable_controls,
             SUM(CASE WHEN pc.is_not_applicable THEN 0 WHEN pc.with_run > 0 THEN 1 ELSE 0 END)::int AS covered_applicable_controls,
