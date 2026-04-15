@@ -1,0 +1,30 @@
+# Root
+.DS_Store
+*.log
+
+# projeto/ (Next.js app — mirrors projeto/.gitignore)
+projeto/node_modules/
+projeto/.pnp
+projeto/.pnp.*
+projeto/.yarn/*
+!projeto/.yarn/patches
+!projeto/.yarn/plugins
+!projeto/.yarn/releases
+!projeto/.yarn/versions
+projeto/coverage/
+projeto/.next/
+projeto/out/
+projeto/build/
+projeto/.vercel
+projeto/*.tsbuildinfo
+projeto/next-env.d.ts
+projeto/npm-debug.log*
+projeto/yarn-debug.log*
+projeto/yarn-error.log*
+projeto/.pnpm-debug.log*
+projeto/.env
+projeto/.env.*
+projeto/*.pem
+projeto/client_secret_*.json
+projeto/prisma/
+projeto/src/generated/prisma

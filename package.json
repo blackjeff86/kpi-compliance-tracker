@@ -1,0 +1,10 @@
+{
+  "name": "kpi-compliance-tracker",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix projeto",
+    "build": "npm run build --prefix projeto",
+    "start": "npm run start --prefix projeto",
+    "lint": "npm run lint --prefix projeto"
+  }
+}

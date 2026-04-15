@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  /* Definindo as cores da VTEX diretamente no tema do Tailwind v4 */
+  --color-vtex-pink: #f71963;
+  --color-vtex-pink-hover: #e01657;
+
+  /* Architectural Auditor / SOX detail template (M3-like tokens) */
+  --color-audit-background: #f6faff;
+  --color-audit-on-surface: #141d23;
+  --color-audit-on-surface-variant: #5c3f43;
+  --color-audit-primary: #b80046;
+  --color-audit-primary-container: #e6005a;
+  --color-audit-secondary: #2c5ab7;
+  --color-audit-secondary-fixed: #dae2ff;
+  --color-audit-on-secondary-fixed-variant: #00419e;
+  --color-audit-on-secondary-container: #00337e;
+  --color-audit-surface-container-lowest: #ffffff;
+  --color-audit-surface-container-low: #ecf5fe;
+  --color-audit-surface-container: #e6eff9;
+  --color-audit-surface-container-high: #e0e9f3;
+  --color-audit-surface-container-highest: #dbe3ed;
+  --color-audit-tertiary: #006a37;
+  --color-audit-outline-variant: #e5bcc1;
+}
+
+:root {
+  --background: #fdfdfd;
+  --foreground: #111827;
+  --vtex-pink-light: rgba(247, 25, 99, 0.1);
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-image: radial-gradient(#e5e7eb 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+}
+
+/* Material Symbols (detalhe SOX / Architectural Auditor) */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  vertical-align: middle;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* No Tailwind v4, usamos @utility para criar classes personalizadas */
+@utility btn-vtex {
+  background-color: var(--color-vtex-pink);
+  color: white;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.25rem;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+  &:hover {
+    background-color: var(--color-vtex-pink-hover);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
