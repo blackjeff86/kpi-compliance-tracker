@@ -12,7 +12,6 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import {
-  INCIDENTES,
   formatIncidentDisplayId,
   type Incidente,
   type IncidentSeverity,
@@ -20,7 +19,7 @@ import {
   severityLabel,
   statusLabel,
 } from "@/data/incidentes"
-import { getAutomacaoById } from "@/data/automacoes-inventario"
+import { fetchIncidentesList } from "@/app/(app)/incidentes/actions"
 
 function safeText(v: unknown) {
   if (v === null || v === undefined) return ""
@@ -28,15 +27,11 @@ function safeText(v: unknown) {
 }
 
 function controleSoxForIncident(row: Incidente): string {
-  if (!row.automacaoInventarioId) return ""
-  const auto = getAutomacaoById(row.automacaoInventarioId)
-  return safeText(auto?.["Controle SOX"])
+  return safeText(row.controleSoxDisplay)
 }
 
 function nomeJiraForIncident(row: Incidente): string {
-  if (!row.automacaoInventarioId) return ""
-  const auto = getAutomacaoById(row.automacaoInventarioId)
-  return safeText(auto?.["Nome Jira"])
+  return safeText(row.nomeJiraDisplay)
 }
 
 function rowSearchBlob(row: Incidente) {
@@ -48,6 +43,9 @@ function rowSearchBlob(row: Incidente) {
     row.affectedObject,
     controleSoxForIncident(row),
     nomeJiraForIncident(row),
+    row.referenceMonth,
+    row.framework,
+    row.idControl,
   ]
     .filter(Boolean)
     .join(" ")
@@ -107,11 +105,35 @@ function IncidentesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const [incidentes, setIncidentes] = useState<Incidente[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSev, setFilterSev] = useState("Todos")
   const [filterStatus, setFilterStatus] = useState("Todos")
   const [page, setPage] = useState(1)
   const pageSize = 10
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setLoadError(null)
+      const res = await fetchIncidentesList()
+      if (cancelled) return
+      if (!res.success) {
+        setLoadError(res.error)
+        setIncidentes([])
+      } else {
+        setIncidentes(res.data)
+      }
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const urlQ = safeText(searchParams.get("q"))
@@ -141,13 +163,13 @@ function IncidentesPageContent() {
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
-    return INCIDENTES.filter((row) => {
+    return incidentes.filter((row) => {
       const matchQ = !q || rowSearchBlob(row).includes(q)
       const matchSev = filterSev === "Todos" || row.severidade === filterSev
       const matchSt = filterStatus === "Todos" || row.status === filterStatus
       return matchQ && matchSev && matchSt
     }).sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))
-  }, [searchTerm, filterSev, filterStatus])
+  }, [incidentes, searchTerm, filterSev, filterStatus])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const canPrev = page > 1
@@ -187,6 +209,9 @@ function IncidentesPageContent() {
           <p className="text-slate-500 mt-1 font-medium text-sm">
             Acompanhe alertas gerados pelas automações, analise e registre o parecer final de cada incidente.
           </p>
+          {loadError ? (
+            <p className="mt-2 text-xs font-semibold text-red-600">Não foi possível carregar do banco: {loadError}</p>
+          ) : null}
         </div>
       </header>
 
@@ -266,8 +291,11 @@ function IncidentesPageContent() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-[1280px] w-full border-collapse text-left">
+        {loading ? (
+          <div className="px-6 py-16 text-center text-sm font-medium text-slate-500">Carregando incidentes…</div>
+        ) : null}
+        <div className={`overflow-x-auto ${loading ? "hidden" : ""}`}>
+          <table className="min-w-[1480px] w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
                 <th className="min-w-[200px] px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -275,6 +303,12 @@ function IncidentesPageContent() {
                 </th>
                 <th className="min-w-[260px] px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                   Controle SOX
+                </th>
+                <th className="whitespace-nowrap px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Framework
+                </th>
+                <th className="whitespace-nowrap px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Mês ref.
                 </th>
                 <th className="min-w-[220px] px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                   Nome Jira
@@ -302,7 +336,7 @@ function IncidentesPageContent() {
             <tbody className="divide-y divide-slate-100">
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-10">
+                  <td colSpan={10} className="px-6 py-10">
                     <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
                       <AlertCircle size={26} strokeWidth={1.5} />
                       <p className="text-sm font-medium">Nenhum incidente com os filtros atuais.</p>
@@ -321,6 +355,16 @@ function IncidentesPageContent() {
                       <div className="line-clamp-4 text-[11px] font-semibold leading-snug text-slate-800">
                         {controleSoxForIncident(row) || "—"}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] font-semibold text-slate-600">
+                        {safeText(row.framework) || "—"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <span className="font-mono text-[10px] font-bold text-slate-500">
+                        {safeText(row.referenceMonth) || "—"}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="max-w-md text-[11px] font-semibold leading-snug text-slate-800">
@@ -367,37 +411,39 @@ function IncidentesPageContent() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-4">
-          <div className="text-xs font-medium text-slate-500">
-            Mostrando <span className="font-bold text-slate-700">{paginated.length}</span> de{" "}
-            <span className="font-bold text-slate-700">{filtered.length}</span> incidentes
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => canPrev && setPage((p) => p - 1)}
-              disabled={!canPrev}
-              className={`rounded-lg border border-slate-200 p-2 text-slate-400 transition-all hover:bg-white ${
-                !canPrev ? "cursor-not-allowed opacity-50" : ""
-              }`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="px-2 text-[11px] font-bold text-slate-400">
-              {Math.min(page, totalPages)} / {totalPages}
+        {!loading ? (
+          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-4">
+            <div className="text-xs font-medium text-slate-500">
+              Mostrando <span className="font-bold text-slate-700">{paginated.length}</span> de{" "}
+              <span className="font-bold text-slate-700">{filtered.length}</span> incidentes
             </div>
-            <button
-              type="button"
-              onClick={() => canNext && setPage((p) => p + 1)}
-              disabled={!canNext}
-              className={`rounded-lg border border-slate-200 p-2 text-slate-400 transition-all hover:bg-white ${
-                !canNext ? "cursor-not-allowed opacity-50" : ""
-              }`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => canPrev && setPage((p) => p - 1)}
+                disabled={!canPrev}
+                className={`rounded-lg border border-slate-200 p-2 text-slate-400 transition-all hover:bg-white ${
+                  !canPrev ? "cursor-not-allowed opacity-50" : ""
+                }`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className="px-2 text-[11px] font-bold text-slate-400">
+                {Math.min(page, totalPages)} / {totalPages}
+              </div>
+              <button
+                type="button"
+                onClick={() => canNext && setPage((p) => p + 1)}
+                disabled={!canNext}
+                className={`rounded-lg border border-slate-200 p-2 text-slate-400 transition-all hover:bg-white ${
+                  !canNext ? "cursor-not-allowed opacity-50" : ""
+                }`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   )

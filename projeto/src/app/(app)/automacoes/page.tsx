@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Suspense, useEffect, useMemo, useState } from "react"
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   Search,
@@ -10,8 +10,11 @@ import {
   Bot,
   CalendarDays,
   User,
+  Plus,
 } from "lucide-react"
-import { AUTOMACOES_INVENTARIO, type AutomacaoInventario } from "@/data/automacoes-inventario"
+import { type AutomacaoInventario } from "@/data/automacoes-inventario"
+import { fetchAutomationInventoryList } from "@/app/(app)/automacoes/actions"
+import { NovaAutomacaoModal } from "@/app/(app)/automacoes/NovaAutomacaoModal"
 
 function safeText(v: unknown) {
   if (v === null || v === undefined) return ""
@@ -78,6 +81,11 @@ function AutomacoesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const [inventory, setInventory] = useState<AutomacaoInventario[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [modalNovaOpen, setModalNovaOpen] = useState(false)
+
   const [searchTerm, setSearchTerm] = useState("")
   const [filterControle, setFilterControle] = useState("Todos")
   const [filterOwner, setFilterOwner] = useState("Todos")
@@ -85,6 +93,26 @@ function AutomacoesPageContent() {
   const [filterKpi, setFilterKpi] = useState("Todos")
   const [page, setPage] = useState(1)
   const pageSize = 12
+
+  const loadInventory = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = Boolean(opts?.soft)
+    if (!soft) {
+      setLoading(true)
+      setLoadError(null)
+    }
+    const res = await fetchAutomationInventoryList()
+    if (!res.success) {
+      setLoadError(res.error)
+      setInventory([])
+    } else {
+      setInventory(res.data)
+    }
+    if (!soft) setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadInventory()
+  }, [loadInventory])
 
   useEffect(() => {
     const urlQ = safeText(searchParams.get("q"))
@@ -117,35 +145,35 @@ function AutomacoesPageContent() {
 
   const controleOptions = useMemo(() => {
     const set = new Set<string>()
-    for (const r of AUTOMACOES_INVENTARIO) {
+    for (const r of inventory) {
       const c = safeText(r["Controle SOX"])
       if (c) set.add(c)
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
-  }, [])
+  }, [inventory])
 
   const ownerOptions = useMemo(() => {
     const set = new Set<string>()
-    for (const r of AUTOMACOES_INVENTARIO) {
+    for (const r of inventory) {
       const o = safeText(r["Owner automação"])
       if (o) set.add(o)
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
-  }, [])
+  }, [inventory])
 
   const freqOptions = useMemo(() => {
     const set = new Set<string>()
-    for (const r of AUTOMACOES_INVENTARIO) {
+    for (const r of inventory) {
       const f = safeText(r["Frequencia automação"])
       if (f) set.add(f)
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
-  }, [])
+  }, [inventory])
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
 
-    return AUTOMACOES_INVENTARIO.filter((row) => {
+    return inventory.filter((row) => {
       const matchQ = !q || rowSearchBlob(row).includes(q)
 
       const c = safeText(row["Controle SOX"])
@@ -164,7 +192,7 @@ function AutomacoesPageContent() {
 
       return matchQ && matchC && matchO && matchF && matchKpi
     }).sort((a, b) => a.id.localeCompare(b.id, "pt-BR", { numeric: true, sensitivity: "base" }))
-  }, [searchTerm, filterControle, filterOwner, filterFreq, filterKpi])
+  }, [inventory, searchTerm, filterControle, filterOwner, filterFreq, filterKpi])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const canPrev = page > 1
@@ -200,12 +228,35 @@ function AutomacoesPageContent() {
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+      <NovaAutomacaoModal
+        open={modalNovaOpen}
+        onClose={() => setModalNovaOpen(false)}
+        onCreated={() => loadInventory({ soft: true })}
+      />
+
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Inventário de Automações</h1>
           <p className="text-slate-500 mt-1 font-medium text-sm">
-            Visão consolidada das automações mapeadas no controle SOX (aba Inventário Automações).
+            Visão consolidada das automações mapeadas no controle SOX (aba Inventário Automações). A tabela abaixo é
+            carregada diretamente da tabela <span className="font-mono text-slate-600">automation_inventory</span> no
+            banco de dados.
           </p>
+          {loadError ? (
+            <p className="mt-2 text-xs font-semibold text-red-600">
+              Não foi possível carregar do banco: {loadError}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex w-full shrink-0 justify-end md:w-auto">
+          <button
+            type="button"
+            onClick={() => setModalNovaOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#f71866] to-[#e01558] px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-[#f71866]/25 transition hover:opacity-95"
+          >
+            <Plus className="h-4 w-4" />
+            Nova automação
+          </button>
         </div>
       </header>
 
@@ -310,7 +361,10 @@ function AutomacoesPageContent() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        {loading ? (
+          <div className="px-6 py-16 text-center text-sm font-medium text-slate-500">Carregando inventário…</div>
+        ) : null}
+        <div className={`overflow-x-auto ${loading ? "hidden" : ""}`}>
           <table className="w-full min-w-[1000px] border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
@@ -422,40 +476,42 @@ function AutomacoesPageContent() {
           </table>
         </div>
 
-        <div className="bg-slate-50/50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-          <div className="text-xs text-slate-500 font-medium">
-            Mostrando <span className="font-bold text-slate-700">{paginated.length}</span> de{" "}
-            <span className="font-bold text-slate-700">{filtered.length}</span> automações
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => canPrev && setPage((p) => p - 1)}
-              disabled={!canPrev}
-              className={`p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-white transition-all ${
-                !canPrev ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-
-            <div className="text-[11px] font-bold text-slate-400 px-2">
-              {Math.min(page, totalPages)} / {totalPages}
+        {!loading ? (
+          <div className="bg-slate-50/50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <div className="text-xs text-slate-500 font-medium">
+              Mostrando <span className="font-bold text-slate-700">{paginated.length}</span> de{" "}
+              <span className="font-bold text-slate-700">{filtered.length}</span> automações
             </div>
 
-            <button
-              type="button"
-              onClick={() => canNext && setPage((p) => p + 1)}
-              disabled={!canNext}
-              className={`p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-white transition-all ${
-                !canNext ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => canPrev && setPage((p) => p - 1)}
+                disabled={!canPrev}
+                className={`p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-white transition-all ${
+                  !canPrev ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <div className="text-[11px] font-bold text-slate-400 px-2">
+                {Math.min(page, totalPages)} / {totalPages}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => canNext && setPage((p) => p + 1)}
+                disabled={!canNext}
+                className={`p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-white transition-all ${
+                  !canNext ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   )

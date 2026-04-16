@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Suspense, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, Download, Share2 } from "lucide-react"
@@ -10,7 +10,9 @@ import {
   severityLabel,
   statusLabel,
   type IncidentSeverity,
+  type Incidente,
 } from "@/data/incidentes"
+import { fetchIncidenteById } from "@/app/(app)/incidentes/actions"
 
 function Ms({
   name,
@@ -89,16 +91,40 @@ function IncidenteDetailContent() {
   const searchParams = useSearchParams()
   const rawId = decodeURIComponent(String((params as { id?: string })?.id || ""))
 
+  const [inc, setInc] = useState<Incidente | null>(null)
+  const [loadState, setLoadState] = useState<"loading" | "ready">("loading")
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoadState("loading")
+      setInc(null)
+      const res = await fetchIncidenteById(rawId)
+      if (cancelled) return
+      if (res.success && res.data) {
+        setInc(res.data)
+      } else {
+        setInc(getIncidenteById(rawId) ?? null)
+      }
+      setLoadState("ready")
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [rawId])
+
   const backHref = useMemo(() => {
     const qs = searchParams?.toString() || ""
     return qs ? `/incidentes?${qs}` : "/incidentes"
   }, [searchParams])
 
-  const inc = useMemo(() => getIncidenteById(rawId), [rawId])
-
   const [verdict, setVerdict] = useState<Verdict>("confirmed")
   const [justificativa, setJustificativa] = useState("")
   const [finalizado, setFinalizado] = useState(false)
+
+  if (loadState === "loading" && !inc) {
+    return <div className="p-8 text-center text-sm text-slate-500">Carregando incidente…</div>
+  }
 
   if (!inc) {
     return (
@@ -157,6 +183,28 @@ function IncidenteDetailContent() {
             <h2 className="text-3xl font-extrabold leading-tight tracking-tight text-audit-on-surface md:text-4xl">
               {inc.titulo}
             </h2>
+            {(inc.referenceMonth || inc.framework || inc.idControl) && (
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                {inc.referenceMonth ? (
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-mono font-bold text-slate-700">
+                    Mês ref.: {inc.referenceMonth}
+                  </span>
+                ) : null}
+                {inc.framework ? (
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 font-semibold">
+                    Framework: {inc.framework}
+                  </span>
+                ) : null}
+                {inc.idControl ? (
+                  <Link
+                    href={`/controles/${encodeURIComponent(inc.idControl)}`}
+                    className="rounded-full border border-[#f71866]/25 bg-[#f71866]/5 px-2.5 py-0.5 font-bold text-[#f71866] hover:bg-[#f71866]/10"
+                  >
+                    Controle: {inc.idControl}
+                  </Link>
+                ) : null}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button

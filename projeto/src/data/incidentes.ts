@@ -37,6 +37,15 @@ export type Incidente = {
   technicalSummary: string
   evidencias: IncidentEvidence[]
   historico: IncidentHistoryItem[]
+  /** Mês de competência (YYYY-MM), preenchido quando o registro vem do banco */
+  referenceMonth?: string
+  /** Controle cadastrado (controls.id_control) quando resolvido na ingestão */
+  idControl?: string | null
+  /** Framework do controle no momento do incidente (denormalizado) */
+  framework?: string | null
+  /** Rótulo para lista/detalhe (inventário ou controle) */
+  controleSoxDisplay?: string | null
+  nomeJiraDisplay?: string | null
 }
 
 export const INCIDENTES: Incidente[] = [

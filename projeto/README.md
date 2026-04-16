@@ -1,42 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KPI Compliance Tracker
 
-## Getting Started
+Aplicação web para **acompanhamento de controles**, **KPIs**, **planos de ação**, **inventário de automações SOX** e **incidentes** correlacionados a **frameworks** e **controles** cadastrados na plataforma.
 
-First, run the development server:
+Stack principal: **Next.js 16**, **React 19**, **PostgreSQL** (via `DATABASE_URL`), **NextAuth** (Google), **Tailwind CSS**.
+
+---
+
+## Documentação para sustentação
+
+O guia detalhado para manutenção (arquitetura, banco de dados, duas camadas de acesso SQL, rotas, seeds e troubleshooting) está em:
+
+**[docs/SUSTENTACAO.md](./docs/SUSTENTACAO.md)**
+
+Recomenda-se ler esse documento antes de alterar fluxos de **Automações**, **Incidentes** ou esquema de `controls` / `automation_*`.
+
+---
+
+## Requisitos e como rodar
+
+- **Node.js** (LTS recomendado) e npm.  
+- Arquivo **`.env`** na pasta `projeto/`, baseado em [`.env.example`](./.env.example).
 
 ```bash
+cd projeto
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra [http://localhost:3000](http://localhost:3000).
 
 ### Bypass de autenticação no localhost (dev)
 
-Em ambiente não-produtivo, ao acessar pelo host `localhost` (ou `127.0.0.1`), o app libera acesso sem exigir Google SSO.
+Em ambiente não produtivo, ao acessar por `localhost` ou `127.0.0.1`, o app pode liberar acesso sem Google SSO (ver `src/lib/auth-bypass.ts`).
 
-Opcionalmente, você pode definir o e-mail usado internamente nesse bypass:
+Opcional:
 
 ```env
 LOCALHOST_BYPASS_EMAIL=seu.email@empresa.com
 ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Autenticação Google (fora do localhost)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Configure `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`, ou use arquivo `client_secret_*.json` na raiz de `projeto/`, conforme `src/auth.ts`. Defina também `AUTH_SECRET` ou `NEXTAUTH_SECRET` em produção.
 
-## Configuração de Upload de Evidências (Google Drive)
+---
+
+## Variáveis de ambiente (resumo)
+
+| Variável | Descrição |
+|----------|-----------|
+| `DATABASE_URL` | PostgreSQL (SSL) — obrigatória para dados reais |
+| `AUTH_SECRET` / `NEXTAUTH_SECRET` | NextAuth |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | SSO Google |
+| `LOCALHOST_BYPASS_EMAIL` | Opcional no dev local |
+
+Detalhes e lista estendida: seção *Variáveis de ambiente* em [docs/SUSTENTACAO.md](./docs/SUSTENTACAO.md).
+
+---
+
+## Configuração de upload de evidências (Google Drive)
 
 ### 1) Variáveis de ambiente
 
-Use o arquivo `.env.example` como base e crie/atualize seu `.env`.
+Use [`.env.example`](./.env.example) como base.
 
-Opção recomendada (JSON completo da service account em 1 variável):
+Opção recomendada (JSON da service account em uma variável):
 
 ```env
 GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","token_uri":"https://oauth2.googleapis.com/token"}
@@ -51,39 +79,36 @@ GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY
 
 ### 2) Compartilhar pasta raiz no Google Drive
 
-1. Crie (ou escolha) a pasta raiz de evidências no Drive.
-2. Compartilhe essa pasta com o e-mail da service account (`client_email`) com permissão de edição.
-3. Copie o ID da pasta na URL do Google Drive.
+1. Crie (ou escolha) a pasta raiz de evidências no Drive.  
+2. Compartilhe com o e-mail da service account (`client_email`), com permissão de edição.  
+3. Copie o **ID** da pasta na URL do Drive.
 
 ### 3) Configurar no sistema (Admin)
 
-1. Acesse `Admin > Configurações`.
-2. Aba `Upload de Evidências`.
-3. Habilite o upload.
-4. Informe o `ID da Pasta Raiz no Google Drive`.
-5. Salve.
+1. Acesse **Admin → Configurações**.  
+2. Aba **Upload de Evidências**.  
+3. Habilite o upload e informe o **ID da pasta raiz**.  
+4. Salve.
 
-### 4) Comportamento automático no registro de execução
+### 4) Comportamento no registro de execução
 
-Ao clicar em `Finalizar Registro` com evidência anexada, o sistema:
+Ao **finalizar registro** com evidência anexada, o sistema cria/reutiliza pastas (`Mês de Referência / Controle / KPI`), envia o arquivo e grava o link em `kpi_runs.evidence_link`.
 
-1. Cria/reutiliza pastas em `Mês de Referência / Controle / KPI`.
-2. Faz upload do arquivo para a pasta do KPI.
-3. Salva o link do arquivo no campo `evidence_link` em `kpi_runs`.
+---
 
-Observação: o sistema evita duplicar pastas, reaproveitando as já existentes.
+## Scripts npm
 
-## Learn More
+| Comando | Descrição |
+|---------|-----------|
+| `npm run dev` | Servidor de desenvolvimento |
+| `npm run build` | Build de produção (`next build --webpack`) |
+| `npm run start` | Servidor após build |
+| `npm run lint` | ESLint |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+O deploy segue o fluxo usual de aplicações Next.js (ex.: Vercel ou container com Node). Garanta `DATABASE_URL` e segredos de auth/Drive configurados no ambiente de produção.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Documentação oficial Next.js: [https://nextjs.org/docs](https://nextjs.org/docs).

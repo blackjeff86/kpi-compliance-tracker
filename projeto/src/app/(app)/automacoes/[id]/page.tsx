@@ -1,10 +1,11 @@
 "use client"
 
-import React, { Suspense, useMemo } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, ExternalLink } from "lucide-react"
 import { getAutomacaoById, type AutomacaoInventario } from "@/data/automacoes-inventario"
+import { fetchAutomationInventoryById } from "@/app/(app)/automacoes/actions"
 
 function safeText(v: unknown) {
   if (v === null || v === undefined) return ""
@@ -145,12 +146,38 @@ function AutomacaoDetailContent() {
   const searchParams = useSearchParams()
   const rawId = decodeURIComponent(String((params as { id?: string })?.id || ""))
 
+  const [row, setRow] = useState<AutomacaoInventario | undefined>(undefined)
+  const [loadState, setLoadState] = useState<"loading" | "ready">("loading")
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoadState("loading")
+      setRow(undefined)
+      const res = await fetchAutomationInventoryById(rawId)
+      if (cancelled) return
+      if (res.success && res.data) {
+        setRow(res.data)
+      } else {
+        setRow(getAutomacaoById(rawId))
+      }
+      setLoadState("ready")
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [rawId])
+
   const backHref = useMemo(() => {
     const qs = searchParams?.toString() || ""
     return qs ? `/automacoes?${qs}` : "/automacoes"
   }, [searchParams])
 
-  const row: AutomacaoInventario | undefined = useMemo(() => getAutomacaoById(rawId), [rawId])
+  if (loadState === "loading" && !row) {
+    return (
+      <div className="p-8 text-center text-sm text-slate-500">Carregando registro…</div>
+    )
+  }
 
   if (!row) {
     return (

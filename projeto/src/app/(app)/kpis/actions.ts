@@ -132,7 +132,7 @@ export async function fetchKpiCreationOptions() {
           COALESCE(c.name_control, '') AS name_control,
           COALESCE(c.framework, 'N/A') AS framework
         FROM controls c
-        ORDER BY c.id_control, c.updated_at DESC NULLS LAST, c.created_at DESC NULLS LAST
+        ORDER BY c.id_control
       )
       SELECT
         cb.id_control,
