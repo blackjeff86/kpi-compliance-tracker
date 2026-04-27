@@ -221,6 +221,9 @@ export async function updateControlTechnicalDetails(input: {
   framework?: string | null
   description_control?: string | null
   goal_control?: string | null
+  owner_name?: string | null
+  focal_point_name?: string | null
+  frequency?: string | null
   risk_title?: string | null
   risk_id?: string | null
   risk_name?: string | null
@@ -236,6 +239,9 @@ export async function updateControlTechnicalDetails(input: {
     const framework = safeText(input.framework)
     const descriptionControl = safeText(input.description_control)
     const goalControl = safeText(input.goal_control)
+    const ownerName = safeText(input.owner_name)
+    const focalPointName = safeText(input.focal_point_name)
+    const frequency = safeText(input.frequency)
     const riskTitle = safeText(input.risk_title)
     const riskId = safeText(input.risk_id)
     const riskName = safeText(input.risk_name)
@@ -266,6 +272,9 @@ export async function updateControlTechnicalDetails(input: {
         framework = ${framework},
         description_control = ${descriptionControl},
         goal_control = ${goalControl},
+        owner_name = ${ownerName},
+        focal_point_name = ${focalPointName},
+        frequency = ${frequency},
         risk_title = ${riskTitle},
         risk_id = ${riskId},
         risk_name = ${riskName},
@@ -276,6 +285,9 @@ export async function updateControlTechnicalDetails(input: {
         framework,
         description_control,
         goal_control,
+        owner_name,
+        focal_point_name,
+        frequency,
         risk_title,
         risk_id,
         risk_name,

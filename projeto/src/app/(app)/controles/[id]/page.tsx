@@ -110,6 +110,18 @@ function formatPeriodoLabel(periodoISO: string) {
   return `${monthName} / ${year}`
 }
 
+/** Alinhado à tela de cadastro (controles/novo) */
+const CONTROL_FREQUENCY_BASE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "—" },
+  { value: "DAILY", label: "Diário" },
+  { value: "WEEKLY", label: "Semanal" },
+  { value: "MONTHLY", label: "Mensal" },
+  { value: "QUARTERLY", label: "Trimestral" },
+  { value: "SEMI_ANNUAL", label: "Semestral" },
+  { value: "ANNUAL", label: "Anual" },
+  { value: "ON_DEMAND", label: "Sob demanda" },
+]
+
 // ✅ agora entende GREEN/YELLOW/RED também
 function statusLooksOk(status: string) {
   const s = safeText(status).toLowerCase()
@@ -208,11 +220,22 @@ function DetalheControlePageContent() {
     framework: "",
     description_control: "",
     goal_control: "",
+    owner_name: "",
+    focal_point_name: "",
+    frequency: "",
     risk_title: "",
     risk_id: "",
     risk_name: "",
     risk_description: "",
   })
+
+  const technicalFrequencyOptions = useMemo(() => {
+    const v = safeText(technicalForm.frequency)
+    if (v && !CONTROL_FREQUENCY_BASE_OPTIONS.some((o) => o.value === v)) {
+      return [{ value: v, label: v }, ...CONTROL_FREQUENCY_BASE_OPTIONS]
+    }
+    return CONTROL_FREQUENCY_BASE_OPTIONS
+  }, [technicalForm.frequency])
 
   useEffect(() => {
     async function loadData() {
@@ -310,6 +333,9 @@ function DetalheControlePageContent() {
       framework: safeText(infoGeral?.framework),
       description_control: safeText(infoGeral?.description_control),
       goal_control: safeText(infoGeral?.goal_control),
+      owner_name: safeText(infoGeral?.owner_name),
+      focal_point_name: safeText(infoGeral?.focal_point_name),
+      frequency: safeText(infoGeral?.frequency),
       risk_title: safeText(infoGeral?.risk_title),
       risk_id: safeText(infoGeral?.risk_id),
       risk_name: safeText(infoGeral?.risk_name),
@@ -422,6 +448,9 @@ function DetalheControlePageContent() {
         framework: safeText(technicalForm.framework) || null,
         description_control: safeText(technicalForm.description_control) || null,
         goal_control: safeText(technicalForm.goal_control) || null,
+        owner_name: safeText(technicalForm.owner_name) || null,
+        focal_point_name: safeText(technicalForm.focal_point_name) || null,
+        frequency: safeText(technicalForm.frequency) || null,
         risk_title: safeText(technicalForm.risk_title) || null,
         risk_id: safeText(technicalForm.risk_id) || null,
         risk_name: safeText(technicalForm.risk_name) || null,
@@ -441,6 +470,9 @@ function DetalheControlePageContent() {
         framework: res?.data?.framework ?? null,
         description_control: res?.data?.description_control ?? null,
         goal_control: res?.data?.goal_control ?? null,
+        owner_name: res?.data?.owner_name ?? null,
+        focal_point_name: res?.data?.focal_point_name ?? null,
+        frequency: res?.data?.frequency ?? null,
         risk_title: res?.data?.risk_title ?? null,
         risk_id: res?.data?.risk_id ?? null,
         risk_name: res?.data?.risk_name ?? null,
@@ -871,6 +903,27 @@ function DetalheControlePageContent() {
                 onChange={(v: string) => setTechnicalForm((p) => ({ ...p, goal_control: v }))}
                 textarea
               />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field
+                  label="Owner"
+                  placeholder="Nome do owner do controle"
+                  value={technicalForm.owner_name}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, owner_name: v }))}
+                />
+                <Field
+                  label="Ponto focal"
+                  placeholder="Nome do ponto focal"
+                  value={technicalForm.focal_point_name}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, focal_point_name: v }))}
+                />
+                <SelectField
+                  label="Frequência"
+                  value={technicalForm.frequency}
+                  onChange={(v: string) => setTechnicalForm((p) => ({ ...p, frequency: v }))}
+                  options={technicalFrequencyOptions}
+                />
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <SelectField
