@@ -1,11 +1,12 @@
 "use client"
 
-import React, { Suspense, useEffect, useMemo, useState } from "react"
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useParams, useSearchParams } from "next/navigation"
-import { ArrowLeft, ExternalLink } from "lucide-react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
+import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react"
 import { getAutomacaoById, type AutomacaoInventario } from "@/data/automacoes-inventario"
-import { fetchAutomationInventoryById } from "@/app/(app)/automacoes/actions"
+import { deleteAutomationInventory, fetchAutomationInventoryById } from "@/app/(app)/automacoes/actions"
+import { NovaAutomacaoModal } from "@/app/(app)/automacoes/NovaAutomacaoModal"
 
 function safeText(v: unknown) {
   if (v === null || v === undefined) return ""
@@ -143,17 +144,31 @@ export default function AutomacaoDetailPage() {
 
 function AutomacaoDetailContent() {
   const params = useParams()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const rawId = decodeURIComponent(String((params as { id?: string })?.id || ""))
 
   const [row, setRow] = useState<AutomacaoInventario | undefined>(undefined)
   const [loadState, setLoadState] = useState<"loading" | "ready">("loading")
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const reloadRow = useCallback(async () => {
+    const res = await fetchAutomationInventoryById(rawId)
+    if (res.success && res.data) {
+      setRow(res.data)
+    } else {
+      setRow(getAutomacaoById(rawId))
+    }
+  }, [rawId])
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setLoadState("loading")
       setRow(undefined)
+      setActionError(null)
       const res = await fetchAutomationInventoryById(rawId)
       if (cancelled) return
       if (res.success && res.data) {
@@ -172,6 +187,23 @@ function AutomacaoDetailContent() {
     const qs = searchParams?.toString() || ""
     return qs ? `/automacoes?${qs}` : "/automacoes"
   }, [searchParams])
+
+  const handleDelete = async () => {
+    if (!row) return
+    const ok = window.confirm(
+      `Excluir o registro ${row.id} do inventário no banco de dados? Incidentes vinculados permanecem, mas o vínculo com este inventário será removido.`
+    )
+    if (!ok) return
+    setDeleteBusy(true)
+    setActionError(null)
+    const res = await deleteAutomationInventory(row.id)
+    setDeleteBusy(false)
+    if (!res.success) {
+      setActionError(res.error)
+      return
+    }
+    router.push(backHref)
+  }
 
   if (loadState === "loading" && !row) {
     return (
@@ -288,6 +320,11 @@ function AutomacaoDetailContent() {
             <p className="max-w-2xl text-sm leading-relaxed text-audit-on-surface-variant">
               Painel técnico de auditoria para monitoramento de fluxos automatizados e conformidade de integridade de dados.
             </p>
+            {actionError ? (
+              <p className="mt-3 max-w-2xl rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-800">
+                {actionError}
+              </p>
+            ) : null}
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Alerta no sistema</span>
               <span
@@ -317,9 +354,22 @@ function AutomacaoDetailContent() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
+              onClick={() => {
+                setActionError(null)
+                setEditOpen(true)
+              }}
               className="rounded-lg bg-audit-surface-container-highest px-6 py-2.5 text-sm font-semibold text-audit-on-secondary-container transition-colors hover:bg-audit-surface-container-high"
             >
               Editar Automação
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteBusy}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-700 shadow-sm transition-all hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4 shrink-0" />
+              {deleteBusy ? "Excluindo…" : "Excluir"}
             </button>
             <button
               type="button"
@@ -591,6 +641,13 @@ function AutomacaoDetailContent() {
       >
         <Ms name="add" filled size="text-2xl" />
       </button>
+
+      <NovaAutomacaoModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onCreated={reloadRow}
+        editRecord={row}
+      />
     </div>
   )
 }

@@ -287,6 +287,134 @@ async function generateNextInventoryId(): Promise<string> {
   return `inv-${String(max + 1).padStart(3, "0")}`
 }
 
+export type UpdateAutomationInventoryInput = Omit<CreateAutomationInventoryInput, "inventoryId">
+
+/**
+ * Cria ou atualiza um registro pelo ID fixo (mesmas regras de validação de {@link createAutomationInventory}).
+ */
+export async function upsertAutomationInventory(
+  inventoryId: string,
+  input: UpdateAutomationInventoryInput
+): Promise<{ success: true; data: AutomacaoInventario } | { success: false; error: string }> {
+  await ensureAutomationInventorySchema()
+
+  const invId = safeText(inventoryId)
+  if (!invId || !/^inv-[a-zA-Z0-9._-]+$/i.test(invId)) {
+    return { success: false, error: "ID do inventário inválido." }
+  }
+
+  const controle = safeText(input.controleSox)
+  const nomeJira = safeText(input.nomeJira)
+  const nomeAuto = safeText(input.nomeAutomacao)
+  if (!controle) {
+    return { success: false, error: "Controle SOX é obrigatório (use o código e nome, ex.: TEC_C92 - …)." }
+  }
+  if (!nomeJira && !nomeAuto) {
+    return { success: false, error: "Informe ao menos Nome Jira ou Nome da automação." }
+  }
+
+  const id_control = await resolveIdControlForSoxLabel(controle)
+  const dataInicial = parseDateColumn(input.dataInicial ?? undefined)
+
+  try {
+    await sql`
+      INSERT INTO automation_inventory (
+        inventory_id,
+        id_control,
+        controle_sox_raw,
+        jira_ticket,
+        jira_nome,
+        nome_automacao,
+        objetivo_automacao,
+        owner_automacao,
+        usuario_automacao,
+        tipo_integracao,
+        aplicacoes_integradas,
+        data_inicial_automacao,
+        frequencia_automacao,
+        canal_slack,
+        objetivo_canal,
+        looker_url,
+        obs,
+        kpi_monitoramento_habilitado
+      ) VALUES (
+        ${invId},
+        ${id_control},
+        ${controle},
+        ${safeText(input.ticketJira) || null},
+        ${nomeJira || null},
+        ${nomeAuto || null},
+        ${safeText(input.objetivoAutomacao) || null},
+        ${safeText(input.ownerAutomacao) || null},
+        ${safeText(input.usuarioAutomacao) || null},
+        ${safeText(input.tipoIntegracao) || null},
+        ${safeText(input.aplicacoesIntegradas) || null},
+        ${dataInicial},
+        ${safeText(input.frequencia) || null},
+        ${safeText(input.canalSlack) || null},
+        ${safeText(input.objetivoCanal) || null},
+        ${safeText(input.lookerUrl) || null},
+        ${safeText(input.obs) || null},
+        ${Boolean(input.kpiMonitoramentoHabilitado)}
+      )
+      ON CONFLICT (inventory_id) DO UPDATE SET
+        id_control = EXCLUDED.id_control,
+        controle_sox_raw = EXCLUDED.controle_sox_raw,
+        jira_ticket = EXCLUDED.jira_ticket,
+        jira_nome = EXCLUDED.jira_nome,
+        nome_automacao = EXCLUDED.nome_automacao,
+        objetivo_automacao = EXCLUDED.objetivo_automacao,
+        owner_automacao = EXCLUDED.owner_automacao,
+        usuario_automacao = EXCLUDED.usuario_automacao,
+        tipo_integracao = EXCLUDED.tipo_integracao,
+        aplicacoes_integradas = EXCLUDED.aplicacoes_integradas,
+        data_inicial_automacao = EXCLUDED.data_inicial_automacao,
+        frequencia_automacao = EXCLUDED.frequencia_automacao,
+        canal_slack = EXCLUDED.canal_slack,
+        objetivo_canal = EXCLUDED.objetivo_canal,
+        looker_url = EXCLUDED.looker_url,
+        obs = EXCLUDED.obs,
+        kpi_monitoramento_habilitado = EXCLUDED.kpi_monitoramento_habilitado,
+        updated_at = now()
+    `
+  } catch (error: any) {
+    console.error("upsertAutomationInventory:", error)
+    return { success: false, error: error?.message || "Erro ao salvar no banco." }
+  }
+
+  try {
+    const rows = await sql<Record<string, unknown>[]>`
+      SELECT * FROM automation_inventory WHERE inventory_id = ${invId} LIMIT 1
+    `
+    const row = rows[0]
+    if (!row) return { success: false, error: "Registro salvo mas não foi possível reler os dados." }
+    return { success: true, data: dbRowToAutomacao(row) }
+  } catch (error: any) {
+    return { success: false, error: error?.message || "Erro ao confirmar alterações." }
+  }
+}
+
+export async function deleteAutomationInventory(
+  inventoryId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const id = safeText(inventoryId)
+  if (!id) return { success: false, error: "ID inválido." }
+  await ensureAutomationInventorySchema()
+  try {
+    const rows = await sql<{ inventory_id: string }[]>`
+      DELETE FROM automation_inventory WHERE inventory_id = ${id}
+      RETURNING inventory_id
+    `
+    if (!rows.length) {
+      return { success: false, error: "Registro não encontrado no inventário do banco de dados." }
+    }
+    return { success: true }
+  } catch (error: any) {
+    console.error("deleteAutomationInventory:", error)
+    return { success: false, error: error?.message || "Erro ao excluir." }
+  }
+}
+
 export async function createAutomationInventory(
   input: CreateAutomationInventoryInput
 ): Promise<{ success: true; data: AutomacaoInventario } | { success: false; error: string }> {

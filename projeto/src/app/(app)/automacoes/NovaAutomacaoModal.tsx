@@ -5,14 +5,28 @@ import { X, Loader2, Sparkles, Search, ChevronDown } from "lucide-react"
 import {
   createAutomationInventory,
   fetchControlsCatalogForAutomacao,
+  upsertAutomationInventory,
   type ControlCatalogRow,
   type CreateAutomationInventoryInput,
 } from "./actions"
+import type { AutomacaoInventario } from "@/data/automacoes-inventario"
 
 type NovaAutomacaoModalProps = {
   open: boolean
   onClose: () => void
   onCreated: () => void | Promise<void>
+  /** Preenchido para edição de um registro existente (salva via upsert pelo ID). */
+  editRecord?: AutomacaoInventario | null
+}
+
+function safeText(v: unknown) {
+  if (v === null || v === undefined) return ""
+  return String(v).trim()
+}
+
+function dashToEmpty(s: string) {
+  const t = safeText(s)
+  return t === "-" || t === "—" ? "" : t
 }
 
 const FREQ_SUGGESTIONS = ["diario", "diário", "Sob demanda", "semanal", "mensal", "horário"]
@@ -39,7 +53,43 @@ function emptyForm() {
   }
 }
 
-export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoModalProps) {
+function automacaoToForm(r: AutomacaoInventario): ReturnType<typeof emptyForm> {
+  const di = dashToEmpty(safeText(r["Data inicial da automação"]))
+  let dataInicial = ""
+  if (di) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(di)) dataInicial = di.slice(0, 10)
+    else {
+      const d = new Date(di + "T12:00:00")
+      if (!Number.isNaN(d.getTime())) {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, "0")
+        const day = String(d.getDate()).padStart(2, "0")
+        dataInicial = `${y}-${m}-${day}`
+      }
+    }
+  }
+  return {
+    inventoryId: r.id,
+    ticketJira: dashToEmpty(safeText(r["Ticket Jira"])),
+    nomeJira: dashToEmpty(safeText(r["Nome Jira"])),
+    controleSox: dashToEmpty(safeText(r["Controle SOX"])),
+    nomeAutomacao: dashToEmpty(safeText(r["Nome automação"])),
+    objetivoAutomacao: dashToEmpty(safeText(r["Objetivo automação"])),
+    ownerAutomacao: dashToEmpty(safeText(r["Owner automação"])),
+    usuarioAutomacao: dashToEmpty(safeText(r["Usuário automação"])),
+    tipoIntegracao: dashToEmpty(safeText(r["Tipo de integração"])),
+    aplicacoesIntegradas: dashToEmpty(safeText(r["Aplicações integradas"])),
+    dataInicial,
+    frequencia: dashToEmpty(safeText(r["Frequencia automação"])),
+    canalSlack: dashToEmpty(safeText(r["Canal Slack"])),
+    objetivoCanal: dashToEmpty(safeText(r["Objetivo (Canal)"])),
+    lookerUrl: dashToEmpty(safeText(r.Looker)),
+    obs: dashToEmpty(safeText(r.OBS)),
+    kpiMonitoramentoHabilitado: Boolean(r.kpiMonitoramentoHabilitado),
+  }
+}
+
+export function NovaAutomacaoModal({ open, onClose, onCreated, editRecord }: NovaAutomacaoModalProps) {
   const titleId = useId()
   const [form, setForm] = useState(emptyForm)
   const [catalog, setCatalog] = useState<ControlCatalogRow[]>([])
@@ -109,6 +159,13 @@ export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoMo
       reset()
       return
     }
+    if (editRecord) {
+      setForm(automacaoToForm(editRecord))
+      setError(null)
+      setSubmitting(false)
+    } else {
+      reset()
+    }
     let cancelled = false
     ;(async () => {
       const res = await fetchControlsCatalogForAutomacao()
@@ -124,7 +181,7 @@ export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoMo
     return () => {
       cancelled = true
     }
-  }, [open, reset])
+  }, [open, reset, editRecord?.id])
 
   useEffect(() => {
     if (!open) return
@@ -189,7 +246,27 @@ export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoMo
       obs: form.obs.trim() || null,
       kpiMonitoramentoHabilitado: form.kpiMonitoramentoHabilitado,
     }
-    const res = await createAutomationInventory(payload)
+    const basePayload = {
+      ticketJira: payload.ticketJira,
+      nomeJira: payload.nomeJira,
+      controleSox: payload.controleSox,
+      nomeAutomacao: payload.nomeAutomacao,
+      objetivoAutomacao: payload.objetivoAutomacao,
+      ownerAutomacao: payload.ownerAutomacao,
+      usuarioAutomacao: payload.usuarioAutomacao,
+      tipoIntegracao: payload.tipoIntegracao,
+      aplicacoesIntegradas: payload.aplicacoesIntegradas,
+      dataInicial: payload.dataInicial,
+      frequencia: payload.frequencia,
+      canalSlack: payload.canalSlack,
+      objetivoCanal: payload.objetivoCanal,
+      lookerUrl: payload.lookerUrl,
+      obs: payload.obs,
+      kpiMonitoramentoHabilitado: payload.kpiMonitoramentoHabilitado,
+    }
+    const res = editRecord
+      ? await upsertAutomationInventory(editRecord.id, basePayload)
+      : await createAutomationInventory(payload)
     setSubmitting(false)
     if (!res.success) {
       setError(res.error)
@@ -221,12 +298,21 @@ export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoMo
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f71866]">Inventário SOX</p>
             <h2 id={titleId} className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-              Nova automação
+              {editRecord ? "Editar automação" : "Nova automação"}
             </h2>
             <p className="mt-1 max-w-2xl text-xs text-slate-500">
-              Preencha os campos alinhados à planilha corporativa. O vínculo com{" "}
-              <span className="font-semibold text-slate-700">Controles e KPIs</span> ocorre quando o código antes de
-              &quot; - &quot; no Controle SOX existir em <span className="font-semibold">controls.id_control</span>.
+              {editRecord ? (
+                <>
+                  Alterações são gravadas no inventário do banco para o registro{" "}
+                  <span className="font-mono font-semibold text-slate-700">{editRecord.id}</span>.
+                </>
+              ) : (
+                <>
+                  Preencha os campos alinhados à planilha corporativa. O vínculo com{" "}
+                  <span className="font-semibold text-slate-700">Controles e KPIs</span> ocorre quando o código antes de
+                  &quot; - &quot; no Controle SOX existir em <span className="font-semibold">controls.id_control</span>.
+                </>
+              )}
             </p>
           </div>
           <button
@@ -384,18 +470,29 @@ export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoMo
             </div>
 
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
-              <div className="md:col-span-1">
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  ID inventário (opcional)
-                </label>
-                <input
-                  className={fieldClass + " font-mono text-xs"}
-                  value={form.inventoryId}
-                  onChange={set("inventoryId")}
-                  placeholder="Ex.: inv-021 (vazio = automático)"
-                  autoComplete="off"
-                />
-              </div>
+              {editRecord ? (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    ID inventário
+                  </label>
+                  <div className={fieldClass + " cursor-default bg-slate-100/90 font-mono text-xs text-slate-600"}>
+                    {editRecord.id}
+                  </div>
+                </div>
+              ) : (
+                <div className="md:col-span-1">
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    ID inventário (opcional)
+                  </label>
+                  <input
+                    className={fieldClass + " font-mono text-xs"}
+                    value={form.inventoryId}
+                    onChange={set("inventoryId")}
+                    placeholder="Ex.: inv-021 (vazio = automático)"
+                    autoComplete="off"
+                  />
+                </div>
+              )}
               <div className="md:col-span-1">
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Ticket Jira
@@ -557,7 +654,7 @@ export function NovaAutomacaoModal({ open, onClose, onCreated }: NovaAutomacaoMo
               className="order-1 inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#f71866] to-[#e01558] px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-[#f71866]/25 hover:opacity-95 disabled:opacity-60 sm:order-2"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salvar no inventário
+              {editRecord ? "Salvar alterações" : "Salvar no inventário"}
             </button>
           </div>
         </form>
